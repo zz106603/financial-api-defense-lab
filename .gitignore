@@ -1,0 +1,26 @@
+# Gradle cache and generated build output
+.gradle/
+build/
+out/
+
+# Local IDE configuration
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# Local environment variables (keep example files versioned)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Runtime logs
+*.log
+logs/
+
+# Operating system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
