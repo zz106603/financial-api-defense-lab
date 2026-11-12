@@ -5,7 +5,3 @@ spring:
     url: jdbc:postgresql://127.0.0.1:${POSTGRES_PORT:5432}/${POSTGRES_DB:financial_api_defense_lab}
     username: ${POSTGRES_USER:financial_api_lab}
     password: ${POSTGRES_PASSWORD}
-
-mybatis:
-  configuration:
-    map-underscore-to-camel-case: true

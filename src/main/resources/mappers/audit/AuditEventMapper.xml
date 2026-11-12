@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="lab.financialapi.audit.AuditEventMapper">
+    <insert id="insert">
+        INSERT INTO audit_event
+            (id, occurred_at, principal_type, principal_id, action, resource_ref, result, reason_code, request_id)
+        VALUES (#{id}, #{occurredAt}, #{principalType}, #{principalId}, #{action}, #{resourceRef},
+                #{result}, #{reasonCode}, #{requestId})
+    </insert>
+</mapper>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="lab.financialapi.account.AccountMapper">
+    <select id="findForCustomer" resultType="lab.financialapi.account.Account">
+        SELECT id, customer_id, bank_name, masked_account_number, balance, created_at
+        FROM account WHERE id = #{accountId} AND customer_id = #{customerId}
+    </select>
+
+    <select id="findForPartner" resultType="lab.financialapi.account.Account">
+        SELECT a.id, a.customer_id, a.bank_name, a.masked_account_number, a.balance, a.created_at
+        FROM account a
+        WHERE a.id = #{accountId}
+          AND EXISTS (
+              SELECT 1 FROM access_grant g
+              WHERE g.account_id = a.id AND g.partner_id = #{partnerId}
+                AND g.permission = 'ACCOUNT_READ' AND g.revoked_at IS NULL
+          )
+    </select>
+
+    <select id="findTransactionsForCustomer" resultType="lab.financialapi.account.TransactionRecord">
+        SELECT t.id, t.account_id, t.occurred_at, t.amount, t.description
+        FROM transaction_record t JOIN account a ON a.id = t.account_id
+        WHERE a.id = #{accountId} AND a.customer_id = #{customerId}
+        ORDER BY t.occurred_at DESC, t.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="findTransactionsForPartner" resultType="lab.financialapi.account.TransactionRecord">
+        SELECT t.id, t.account_id, t.occurred_at, t.amount, t.description
+        FROM transaction_record t
+        WHERE t.account_id = #{accountId}
+          AND EXISTS (
+              SELECT 1 FROM access_grant g
+              WHERE g.account_id = t.account_id AND g.partner_id = #{partnerId}
+                AND g.permission = 'TRANSACTION_READ' AND g.revoked_at IS NULL
+          )
+        ORDER BY t.occurred_at DESC, t.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+</mapper>
