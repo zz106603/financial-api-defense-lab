@@ -2,7 +2,7 @@
 
 ## 1. 범위
 
-[프로젝트 개발 순서](project-overview.md#9-개발-진행-순서)의 1단계를 구성한다. 업무 API·스키마·Mapper·JWT 인증과 테스트·CI 구현은 후속 단계다. 현재 보호할 금융정보 엔드포인트는 없으며, 이 골격은 인증·인가 구현을 완료한 서비스가 아니다.
+[프로젝트 개발 순서](project-overview.md#9-개발-진행-순서)의 1단계인 개발환경을 설명한다. 2단계의 기본 테스트·CI는 [테스트 및 CI 안내](testing-ci.md)를 따른다. 업무 API·스키마·Mapper·JWT 인증은 후속 단계다. 현재 보호할 금융정보 엔드포인트는 없으며, 이 골격은 인증·인가 구현을 완료한 서비스가 아니다.
 
 ## 2. 도구 및 의존성
 
@@ -57,7 +57,7 @@ docker compose ps
 docker compose exec -T postgres pg_isready -U financial_api_lab -d financial_api_defense_lab
 ```
 
-기본 계정·DB 이름을 변경했다면 `pg_isready` 인자도 변경한다. 현재 테스트 소스가 없으므로 `build` 성공을 테스트 통과나 보안 검증 완료로 해석하지 않는다. 기본 테스트와 GitHub Actions CI는 개발 순서 2단계에서 구성한다.
+기본 계정·DB 이름을 변경했다면 `pg_isready` 인자도 변경한다. `clean build`에는 Testcontainers 기반 기본 통합 테스트가 포함되므로 Docker 엔진이 실행 중이어야 한다. 테스트 DB는 Compose의 로컬 DB와 별개로 자동 생성·정리되며, 테스트만 실행할 때는 `.env`와 Compose 기동이 필요하지 않다. 기본 통합 테스트 통과를 아직 구현하지 않은 보안 요구사항 전체의 검증 완료로 해석하지 않는다.
 
 패키징된 JAR로도 실행할 수 있다.
 
