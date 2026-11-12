@@ -2,15 +2,20 @@
 
 ## 1. 범위
 
-[개발 순서](project-overview.md#9-개발-진행-순서)의 2단계로, 초기 애플리케이션의 기동과 데이터 접근 기반을 검증하고 같은 검증을 GitHub Actions에서 실행한다.
+[개발 순서](project-overview.md#9-개발-진행-순서)의 2~3단계로, 애플리케이션 기동과 PostgreSQL 데이터 모델·MyBatis를 검증하고 같은 검증을 GitHub Actions에서 실행한다.
 
 | 대상 | 현재 검증 |
 |---|---|
 | PostgreSQL·MyBatis·Flyway | 앱의 SqlSessionFactory로 격리된 PostgreSQL에 연결하고 Flyway 이력 테이블·검증 결과 확인 |
 | 웹 기동 | 임의 포트로 실제 서버를 실행하고 미매핑 경로의 HTTP 404 확인 |
+| 업무 스키마 | 7개 테이블, 필수 값·FK·소유자 복합 FK·권한 CHECK·활성 권한 중복·회수 이력·감사 주체·탐지 창 제약 |
+| XML Mapper | sub별 주체 매핑, UUID·금액·시각·enum 매핑, 고객 소유권·제휴사별 계좌/권한 범위·회수 상태, 거래 정렬/페이지 격리, 감사·탐지 저장 |
+| DB 경합·가시성 | 독립 트랜잭션의 동시 활성 권한 부여 중 1건만 커밋, 회수 커밋 후 동일 MyBatis 세션의 새 조회 거부 |
 | 빌드 | Java 21 컴파일, 테스트, 실행 JAR 패키징 |
 
-업무 로직이 아직 없어 형식적인 단위 테스트는 추가하지 않는다. 현재 테스트는 `ApplicationIntegrationTest`의 기본 통합 테스트 2개이며, JWT 인증·객체별 인가·권한 변경·감사·탐지의 SEC-01~12 보안 회귀 테스트는 아직 구현되지 않았다. 해당 기능을 구현하면서 [보안 요구사항](security-requirements.md#6-필수-보안-테스트)에 따른 단위·통합 테스트를 추가한다. JWT 모의 인증과 실제 서명 검증은 후속 인증 테스트에서 구분한다.
+형식적인 모델 getter 단위 테스트는 추가하지 않는다. 현재 `ApplicationIntegrationTest` 2개, `SchemaIntegrationTest` 10개, `PersistenceIntegrationTest` 10개, `ConcurrencyIntegrationTest` 2개로 총 24개 통합 테스트를 구성한다.
+
+DB 계층에서 SEC-02~08·10의 관련 소유권/권한 범위를 일부 검증하지만, JWT·HTTP API·서비스 계층이 없으므로 SEC-01~12 전체 보안 회귀 검증을 완료한 것은 아니다. API 응답 필드 차단(SEC-09), 탐지 실행(SEC-11), 감사 민감정보 차단(SEC-12), 권한 변경·감사 원자성 및 거부 감사의 독립 저장은 후속 단계다. 감사 저장 테스트는 전달된 구조화 필드의 저장만 확인하며 가명화·민감정보 필터를 검증하지 않는다. JWT 모의 인증과 실제 서명 검증은 후속 인증 테스트에서 구분한다.
 
 ## 2. 로컬 실행
 
@@ -30,6 +35,15 @@ Java 21과 실행 중인 Docker Linux 엔진이 필요하다. Testcontainers는 
 macOS/Linux에서는 `.\gradlew.bat` 대신 `./gradlew`를 사용한다. `gradlew`는 Git 실행 권한 `100755`와 LF 줄바꿈을 유지해야 한다.
 
 테스트는 `test` 프로필과 동적으로 전달한 컨테이너 연결 정보를 사용한다. 로컬 `.env`나 Compose의 기존 DB·데이터 볼륨을 사용하지 않는다. Flyway와 MyBatis의 자동 구성을 비활성화하거나 H2로 대체하지 않는다.
+
+영속성 테스트 3개 클래스는 하나의 JVM 수명 PostgreSQL 컨테이너와 Spring 컨텍스트를 공유하고 Ryuk이 컨테이너를 정리한다. 스키마·Mapper 테스트는 테스트 트랜잭션으로 롤백한다. 경합 테스트는 실제 커밋이 필요하므로 테스트 전후 테스트 DB만 비우고 고정 Fixture를 다시 삽입한다. 병렬 테스트 실행은 설정하지 않는다. `@Sql`의 정리 스크립트는 일반 애플리케이션 DB에 실행하면 안 된다.
+
+```powershell
+.\gradlew.bat test --tests '*SchemaIntegrationTest' --no-daemon
+.\gradlew.bat test --tests '*PersistenceIntegrationTest' --tests '*ConcurrencyIntegrationTest' --no-daemon
+```
+
+회수 가시성 테스트는 `READ COMMITTED` 및 같은 SqlSession의 반복 조회를 사용한다. `SESSION` 캐시로 변경하면 이전 허용 결과가 재사용되어 실패하므로, 기본 캐시로 정책이 퇴행하는 경우도 탐지한다. 현재 테스트는 Mapper 수준이며 회수 HTTP 성공 응답과 API 요청의 시간 순서까지 검증하지는 않는다.
 
 실행 결과는 `build/reports/tests/test/index.html`, JUnit XML은 `build/test-results/test/`에서 확인한다. 테스트 의존성은 Spring Boot BOM으로 버전을 관리하며 애플리케이션 런타임에 포함하지 않는다.
 
