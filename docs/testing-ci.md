@@ -2,20 +2,26 @@
 
 ## 1. 범위
 
-[개발 순서](project-overview.md#9-개발-진행-순서)의 2~3단계로, 애플리케이션 기동과 PostgreSQL 데이터 모델·MyBatis를 검증하고 같은 검증을 GitHub Actions에서 실행한다.
+[개발 순서](project-overview.md#9-개발-진행-순서)의 2~4단계로, 애플리케이션 기동과 PostgreSQL·MyBatis 및 JWT 인증·DB 주체 매핑을 검증하고 같은 검증을 GitHub Actions에서 실행한다.
 
 | 대상 | 현재 검증 |
 |---|---|
 | PostgreSQL·MyBatis·Flyway | 앱의 SqlSessionFactory로 격리된 PostgreSQL에 연결하고 Flyway 이력 테이블·검증 결과 확인 |
-| 웹 기동 | 임의 포트로 실제 서버를 실행하고 미매핑 경로의 HTTP 404 확인 |
+| 웹 기동 | 임의 포트로 실제 서버를 실행하고 유효한 서명 토큰으로 미매핑 경로의 HTTP 404 확인 |
 | 업무 스키마 | 7개 테이블, 필수 값·FK·소유자 복합 FK·권한 CHECK·활성 권한 중복·회수 이력·감사 주체·탐지 창 제약 |
 | XML Mapper | sub별 주체 매핑, UUID·금액·시각·enum 매핑, 고객 소유권·제휴사별 계좌/권한 범위·회수 상태, 거래 정렬/페이지 격리, 감사·탐지 저장 |
 | DB 경합·가시성 | 독립 트랜잭션의 동시 활성 권한 부여 중 1건만 커밋, 회수 커밋 후 동일 MyBatis 세션의 새 조회 거부 |
+| JWT·요청 주체 | 실제 RSA 서명·변조·알고리즘·클레임 검증, PostgreSQL 주체 매핑·추가 ID/scope 무시·재식별, Bearer 전용/Stateless, 401/403/503 비노출 오류 |
+| 인증 설정 | 필수 값 누락, 잘못된 PEM·없는 파일·2048비트 미만 RSA 키 거부 |
 | 빌드 | Java 21 컴파일, 테스트, 실행 JAR 패키징 |
 
-형식적인 모델 getter 단위 테스트는 추가하지 않는다. 현재 `ApplicationIntegrationTest` 2개, `SchemaIntegrationTest` 10개, `PersistenceIntegrationTest` 10개, `ConcurrencyIntegrationTest` 2개로 총 24개 통합 테스트를 구성한다.
+형식적인 모델 getter 단위 테스트는 추가하지 않는다. 현재 `ApplicationIntegrationTest` 2개, `SchemaIntegrationTest` 10개, `PersistenceIntegrationTest` 10개, `ConcurrencyIntegrationTest` 2개, `JwtAuthenticationIntegrationTest` 44개, `JwtConfigurationTest` 8개로 총 76개 테스트를 구성한다. 매개변수화 테스트는 각 입력 사례를 한 개로 계산한다.
 
-DB 계층에서 SEC-02~08·10의 관련 소유권/권한 범위를 일부 검증하지만, JWT·HTTP API·서비스 계층이 없으므로 SEC-01~12 전체 보안 회귀 검증을 완료한 것은 아니다. API 응답 필드 차단(SEC-09), 탐지 실행(SEC-11), 감사 민감정보 차단(SEC-12), 권한 변경·감사 원자성 및 거부 감사의 독립 저장은 후속 단계다. 감사 저장 테스트는 전달된 구조화 필드의 저장만 확인하며 가명화·민감정보 필터를 검증하지 않는다. JWT 모의 인증과 실제 서명 검증은 후속 인증 테스트에서 구분한다.
+DB 계층에서 SEC-02~08·10의 관련 소유권/권한 범위를 일부 검증한다. 인증 테스트는 SEC-01·10의 필터 체인 거부 및 실제 JWT 서명/클레임 검증을 추가로 확인하지만 금융정보 HTTP API·서비스 계층이 없으므로 SEC-01~12 전체 보안 회귀 검증을 완료한 것은 아니다. API 응답 필드 차단(SEC-09), 탐지 실행(SEC-11), 감사 민감정보 차단(SEC-12), 권한 변경·감사 원자성 및 거부 감사의 독립 저장은 후속 단계다. 감사 저장 테스트는 전달된 구조화 필드의 저장만 확인하며 가명화·민감정보 필터를 검증하지 않는다.
+
+JWT 인증 테스트는 실제 RSA 개인키로 서명한 토큰을 Authorization 헤더로 보내 Resource Server 필터와 실제 Decoder, 고객/제휴사 Mapper를 통과한다. 서명 변조·다른 키·RS512·HS256/공개키 혼동·서명 없는 토큰, 잘못된 issuer/audience·만료/미활성 시각·누락/잘못된 클레임·미등록 주체를 거부한다. 같은 sub의 유형 분리, 추가 scope/roles/ID 무시, 매 요청 주체 재조회, Basic/쿼리/폼 토큰 거부, 세션 미생성, 역할 거부와 주체 DB 장애도 검증한다. DB 장애는 테스트 트랜잭션 내 테이블 이름 변경으로 재현하고 롤백한다.
+
+테스트에는 JwtDecoder 모킹이나 `jwt()` 모의 인증을 사용하지 않는다. 향후 모의 인증 기반 API 인가 테스트를 추가하더라도 실제 서명 검증 테스트와 구분하고 이 테스트를 대체하지 않는다. 진단용 Controller와 RSA 개인키는 테스트 클래스에만 있고 개인키 파일을 만들지 않는다. 기본 웹 기동 테스트도 실제 서명 토큰과 테스트 DB Fixture를 사용하며, 미인증 요청을 허용하도록 필터 체인을 우회하지 않는다.
 
 ## 2. 로컬 실행
 
@@ -36,11 +42,14 @@ macOS/Linux에서는 `.\gradlew.bat` 대신 `./gradlew`를 사용한다. `gradle
 
 테스트는 `test` 프로필과 동적으로 전달한 컨테이너 연결 정보를 사용한다. 로컬 `.env`나 Compose의 기존 DB·데이터 볼륨을 사용하지 않는다. Flyway와 MyBatis의 자동 구성을 비활성화하거나 H2로 대체하지 않는다.
 
+웹 인증 테스트는 테스트 JVM이 생성한 RSA 공개키 임시 파일과 테스트 issuer/audience를 동적으로 등록한다. 운영용 JWT 설정이나 외부 인증 서버 없이 실행된다. 인증 테스트는 MockMvc에 실제 Spring Security 필터를 적용하고, 기본 웹 기동 테스트는 실제 HTTP 서버를 사용한다.
+
 영속성 테스트 3개 클래스는 하나의 JVM 수명 PostgreSQL 컨테이너와 Spring 컨텍스트를 공유하고 Ryuk이 컨테이너를 정리한다. 스키마·Mapper 테스트는 테스트 트랜잭션으로 롤백한다. 경합 테스트는 실제 커밋이 필요하므로 테스트 전후 테스트 DB만 비우고 고정 Fixture를 다시 삽입한다. 병렬 테스트 실행은 설정하지 않는다. `@Sql`의 정리 스크립트는 일반 애플리케이션 DB에 실행하면 안 된다.
 
 ```powershell
 .\gradlew.bat test --tests '*SchemaIntegrationTest' --no-daemon
 .\gradlew.bat test --tests '*PersistenceIntegrationTest' --tests '*ConcurrencyIntegrationTest' --no-daemon
+.\gradlew.bat test --tests '*JwtAuthenticationIntegrationTest' --tests '*JwtConfigurationTest' --no-daemon
 ```
 
 회수 가시성 테스트는 `READ COMMITTED` 및 같은 SqlSession의 반복 조회를 사용한다. `SESSION` 캐시로 변경하면 이전 허용 결과가 재사용되어 실패하므로, 기본 캐시로 정책이 퇴행하는 경우도 탐지한다. 현재 테스트는 Mapper 수준이며 회수 HTTP 성공 응답과 API 요청의 시간 순서까지 검증하지는 않는다.

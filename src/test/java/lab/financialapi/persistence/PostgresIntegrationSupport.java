@@ -8,7 +8,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-abstract class PostgresIntegrationSupport {
+public abstract class PostgresIntegrationSupport {
     // JVM 종료까지 공유하며 Ryuk이 정리한다. 클래스 간 컨텍스트의 닫힌 DB 재사용을 방지한다.
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.1")
             .withDatabaseName("financial_persistence_test");

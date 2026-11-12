@@ -2,7 +2,7 @@
 
 ## 1. 범위
 
-[프로젝트 개발 순서](project-overview.md#9-개발-진행-순서)의 개발환경을 설명한다. 테스트·CI는 [테스트 및 CI 안내](testing-ci.md)를 따른다. 현재 3단계의 업무 스키마·Mapper까지 구현했으며 업무 API·JWT 인증은 후속 단계다. 현재 보호할 금융정보 엔드포인트는 없으며, 인증·인가 구현을 완료한 서비스가 아니다.
+[프로젝트 개발 순서](project-overview.md#9-개발-진행-순서)의 개발환경을 설명한다. 테스트·CI는 [테스트 및 CI 안내](testing-ci.md)를 따른다. 현재 4단계의 JWT 인증·DB 주체 식별까지 구현했으며 업무 API는 후속 단계다. 금융정보 엔드포인트는 아직 없으며, 객체별 인가·감사까지 완료한 서비스가 아니다.
 
 ## 2. 도구 및 의존성
 
@@ -38,12 +38,22 @@ Copy-Item .env.example .env
 
 `.env`는 Git에서 제외된다. 예제 자격정보는 격리된 로컬 합성 데이터 개발 전용이며 다른 환경에서 재사용하지 않는다. 포트 충돌 시 `.env`의 `POSTGRES_PORT`를 변경한다. Compose와 애플리케이션의 `local` 프로필이 같은 파일을 읽으며, 애플리케이션에는 OS 환경변수로도 값을 제공할 수 있다.
 
+JWT 검증 설정도 `.env` 또는 OS 환경변수로 제공한다. 기존 `.env`가 있다면 덮어쓰지 않고 아래 항목을 추가한다.
+
+| 환경변수 | 용도 |
+|---|---|
+| JWT_ISSUER | 신뢰하는 발급자의 정확한 `iss` 값 |
+| JWT_AUDIENCE | 이 API용 토큰의 `aud` 값 |
+| JWT_PUBLIC_KEY_LOCATION | X.509 PEM RSA 공개키의 Spring Resource 위치(예: `file:C:/keys/issuer-public.pem`) |
+
+`.env.example`의 공개키 경로는 예시이므로 실제 신뢰하는 공개키 경로로 바꿔야 한다. RSA 2048비트 이상과 RS256을 사용한다. issuer는 클레임 비교에만 사용하며 해당 URL로 네트워크 요청을 보내지 않는다. 설정이 없거나 공개키가 잘못되면 웹 애플리케이션은 기동하지 않는다. 개인키·테스트 토큰·개발용 기본 신뢰 키를 배포 코드에 추가하지 않는다. 키 교체에는 재기동이 필요하다.
+
 ```powershell
 docker compose up -d --wait postgres
 .\gradlew.bat bootRun --args='--spring.profiles.active=local'
 ```
 
-애플리케이션은 `127.0.0.1:8080`, PostgreSQL은 `127.0.0.1:5432`에 바인딩한다. `local` 프로필을 명시해야 로컬 DB 연결 설정을 읽는다. HTTP API는 아직 없으므로 루트 경로의 404는 정상이다. Flyway가 `db/migration/V1__create_financial_schema.sql`을 적용해 7개 업무 테이블을 생성한다. 합성 데이터는 `src/test/resources/fixtures/financial-data.sql`의 테스트 전용 Fixture로 분리했으며 일반 기동 시 자동 삽입하지 않는다.
+애플리케이션은 `127.0.0.1:8080`, PostgreSQL은 `127.0.0.1:5432`에 바인딩한다. `local` 프로필을 명시해야 로컬 DB 연결 설정을 읽는다. 일반 경로는 JWT 인증이 필요하므로 미인증 루트 요청도 401을 반환한다. 등록된 주체의 유효한 토큰으로 매핑되지 않은 경로를 요청하면 404다. Flyway가 `db/migration/V1__create_financial_schema.sql`을 적용해 7개 업무 테이블을 생성한다. 합성 데이터는 `src/test/resources/fixtures/financial-data.sql`의 테스트 전용 Fixture로 분리했으며 일반 기동 시 자동 삽입하지 않는다. 로컬에서 인증 성공을 확인하려면 별도로 준비한 발급 도구의 sub/유형과 일치하는 합성 주체 데이터가 필요하다.
 
 MyBatis XML 경로·UUID TypeHandler·생성자 매핑과 `STATEMENT` 로컬 캐시는 공통 `application.yaml`에서 설정한다. 로컬 캐시를 `SESSION`으로 바꾸거나 권한 조회에 2차 캐시를 추가하면 회수 후 재조회 정책에 영향을 줄 수 있다.
 
