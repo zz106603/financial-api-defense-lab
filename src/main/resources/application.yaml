@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: financial-api-defense-lab
+
+server:
+  address: 127.0.0.1
