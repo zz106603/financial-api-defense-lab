@@ -6,6 +6,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
+import lab.financialapi.identity.JwtTestTokens;
+
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,7 @@ import org.springframework.boot.web.server.servlet.context.ServletWebServerAppli
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.jdbc.Sql;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -35,6 +38,7 @@ class ApplicationIntegrationTest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        JwtTestTokens.registerProperties(registry);
     }
 
     @Autowired
@@ -61,11 +65,14 @@ class ApplicationIntegrationTest {
     }
 
     @Test
+    @Sql("/fixtures/financial-data.sql")
+    @Sql(scripts = "/fixtures/clear-financial-data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
     void 웹서버가_기동되고_매핑되지_않은_경로는_404를_반환한다() throws Exception {
         try (var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
             var request = HttpRequest.newBuilder()
                     .uri(URI.create("http://127.0.0.1:" + application.getWebServer().getPort() + "/__bootstrap_test__"))
                     .timeout(Duration.ofSeconds(5))
+                    .header("Authorization", "Bearer " + JwtTestTokens.token("customer-a", "CUSTOMER"))
                     .GET()
                     .build();
 
