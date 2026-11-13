@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
 import lab.financialapi.account.AccountMapper;
 import lab.financialapi.authorization.AccessGrantMapper;
 import lab.financialapi.authorization.Permission;
+import lab.financialapi.identity.PrincipalType;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,27 @@ class ConcurrencyIntegrationTest extends PostgresIntegrationSupport {
     @Autowired AccessGrantMapper grants;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired SqlSessionFactory sessions;
+
+    @Test
+    void API용_투영도_별도_회수_커밋_후_동일_세션에서_계좌와_거래를_거부한다() {
+        var transactionGrant = newGrant(ACCOUNT_A1, PARTNER_Y, Permission.TRANSACTION_READ, CUSTOMER_A);
+        grants.insert(transactionGrant);
+        try (var session = sessions.openSession(false)) {
+            var mapper = session.getMapper(AccountMapper.class);
+            assertThat(mapper.readAccount(ACCOUNT_A1, PARTNER_X, PrincipalType.PARTNER).accountId()).isEqualTo(ACCOUNT_A1);
+            assertThat(mapper.readTransactionPage(ACCOUNT_A1, PARTNER_Y, PrincipalType.PARTNER, 2, 0)
+                    .getFirst().authorizedAccountId()).isEqualTo(ACCOUNT_A1);
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                assertThat(grants.revoke(INITIAL_GRANT, ACCOUNT_A1, CUSTOMER_A, TIME)).isEqualTo(1);
+                assertThat(grants.revoke(transactionGrant.id(), ACCOUNT_A1, CUSTOMER_A, TIME)).isEqualTo(1);
+            });
+            assertThat(mapper.readAccount(ACCOUNT_A1, PARTNER_X, PrincipalType.PARTNER).accountId()).isNull();
+            var page = mapper.readTransactionPage(ACCOUNT_A1, PARTNER_Y, PrincipalType.PARTNER, 2, 0);
+            assertThat(page.getFirst().authorizedAccountId()).isNull();
+            assertThat(page.getFirst().amount()).isNull();
+            session.rollback();
+        }
+    }
 
     @Test
     void 별도_트랜잭션의_회수_커밋_후에는_동일_세션의_새_조회도_거부된다() {
