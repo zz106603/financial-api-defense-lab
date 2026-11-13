@@ -107,6 +107,18 @@ Authorization Service가 요청 주체·대상 계좌·조회 행위에 대한 �
 
 조회 경로의 불필요한 사전 권한 조회와 정책 중복 구현은 피한다. 데이터 조회 결과가 없을 때 외부에는 객체 존재 여부를 노출하지 않는다.
 
+### 5.1 5단계 조회 구현
+
+- `account.AccountController`는 JWT에서 식별한 `AuthenticatedPrincipal`과 검증한 UUID·페이지를 `AccountQueryService`에 전달한다. 일반 계좌/거래 영속성 모델을 직접 응답하지 않고 명세 필드만 가진 DTO를 반환한다.
+- `authorization.FinancialReadAuthorizationService`는 주체 유형·UUID를 검사한 뒤 `AccountMapper.readAccount/readTransactionPage`를 호출한다. 별도 사전 인가 SQL은 없으며 실제 데이터 SQL에 소유권 또는 계좌·제휴사·개별 미회수 권한 조건을 적용한다.
+- 각 조회는 별도 `READ COMMITTED` 읽기 전용 트랜잭션으로 실행해 호출 측의 오래된 스냅샷을 물려받지 않는다. MyBatis STATEMENT 캐시 설정을 유지한다.
+- 단일 SQL의 target CTE와 LATERAL 조인으로 최소 한 행의 내부 상태를 반환한다. 미존재/무권한의 금융 필드는 null이며, 거래가 없는 허용된 계좌/페이지는 authorizedAccountId를 유지한다. 무권한과 미존재의 존재 여부는 감사 사유에만 사용한다.
+- 페이지 기본값 0/20·size 최대 100, long offset, 거래 시각/UUID 내림차순과 size+1 방식의 hasNext를 적용한다.
+- `AccountQueryService`는 조회 후 `audit.ReadAuditService`의 별도 Bean 프록시로 동기 감사하고, 커밋이 끝난 뒤에만 성공 또는 404를 반환한다. 감사 실패면 고정 운영 오류를 기록하고 503으로 차단한다.
+- `common.web.RequestIds`는 조회 성공·오류·감사 및 보안 오류에서 같은 서버 UUID를 사용한다. `ApiExceptionHandler`는 고정된 조회 오류를 반환하고 SQL·예외 상세를 응답/운영 오류 메시지에 넣지 않는다.
+
+이번 단계에서 금융정보 반환의 선행 조건인 조회용 최소 감사를 포함했다. 권한 변경과 감사의 동일 트랜잭션, 인증/입력 오류 감사, 탐지 집계는 후속 단계다.
+
 ### MyBatis 원칙
 
 - XML Mapper에서 SQL을 관리한다.
@@ -145,6 +157,10 @@ PostgreSQL 기본 `READ COMMITTED`를 사용하고 매 조회 SQL에서 현재 �
 | 필수 감사 저장 실패 | 금융정보 반환 중단·오류 처리 |
 
 거부 이벤트는 업무 롤백에도 유지되도록 별도 Audit Service의 트랜잭션 경계에서 처리한다.
+
+조회 허용·거부는 `ReadAuditService.record`의 `REQUIRES_NEW`로 독립 커밋한다. 일반 HTTP 조회 경로에서는 읽기 트랜잭션을 종료한 뒤 감사 트랜잭션을 시작한다. 호출 측에 별도 업무 트랜잭션이 있으면 그 연결을 유지한 채 추가 연결을 사용하므로 중첩 호출의 동시성에 맞는 풀 크기가 필요하다. [Spring 트랜잭션 전파 문서](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html)의 연결 수 주의사항을 따른다.
+
+감사에는 검증된 주체 UUID·유형, 조회 행위, 가명 계좌 참조, 결과·사유·요청 ID만 전달한다. 계좌 가명화 키는 `AUDIT_RESOURCE_HMAC_KEY` 외부 설정이며 세부 형식과 키 변경 영향은 [데이터 모델](data-model.md#43-조회-감사와-가명-참조)을 따른다.
 
 감사 저장소 장애로 기록을 남길 수 없으면 운영 오류를 기록하고 접근은 허용하지 않는다. 저장소 장애 시 감사 기록의 완전한 보존은 보장하지 않는다.
 
@@ -205,9 +221,8 @@ SAST·의존성 검사는 단계적으로 추가하며 결함 주입 Evals는 �
 ## 10. 후속 구현 결정
 
 - 외부 토큰 발급 도구 구성(제품 API 외부), 운영 키 교체 방식
-- [인가 정책과 Mapper의 구체적인 연결 방식](#5-인가-및-금융정보-조회)
 - [SQL·트랜잭션 경계의 실제 동시성 검증](#권한-회수와-조회의-동시성)
-- [감사 기록 실패 및 오류 처리 세부 구현](#감사-이벤트-트랜잭션)
+- 권한 변경·인증/입력 오류 감사 및 전체 요청 추적 확장(조회 감사 경계는 구현됨)
 - [탐지 중복 알림 억제](#7-이상-접근-탐지)
 - [Codex 하네스 및 CI의 구체적인 실행 절차](#8-테스트-및-ci)
 

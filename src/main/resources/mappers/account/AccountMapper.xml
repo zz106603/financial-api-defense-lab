@@ -1,6 +1,76 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="lab.financialapi.account.AccountMapper">
+    <!-- 존재 여부는 내부 감사용이다. 허용된 행만 LATERAL 조인으로 금융 필드에 투영한다. -->
+    <select id="readAccount" resultType="lab.financialapi.account.AccountReadRow">
+        <!-- 대상은 한 번 구하고 같은 SQL에서 존재/인가를 평가한다. 별도의 사전 인가 요청이 아니다. -->
+        WITH target AS MATERIALIZED (
+            SELECT id, customer_id, bank_name, masked_account_number, balance
+            FROM account WHERE id = #{accountId}
+        )
+        <!-- account_exists는 내부 감사용, 외부로 보낼 데이터는 인가를 통과한 allowed에서만 가져온다. -->
+        SELECT EXISTS (SELECT 1 FROM target) AS account_exists,
+               allowed.id AS account_id, allowed.bank_name, allowed.masked_account_number, allowed.balance
+        <!-- 기준 행 한 개를 유지해 미존재/거부도 상태 행을 반환하고 금융 필드만 null로 만든다. -->
+        FROM (VALUES (1)) AS seed(value)
+        LEFT JOIN LATERAL (
+            SELECT t.id, t.bank_name, t.masked_account_number, t.balance FROM target t
+            WHERE
+            <choose>
+                <when test="principalType != null and principalType.name() == 'CUSTOMER'">
+                    <!-- principalId는 JWT에서 DB로 매핑한 고객 UUID이며 URL의 계좌 소유자를 주장하는 값이 아니다. -->
+                    t.customer_id = #{principalId}
+                </when>
+                <when test="principalType != null and principalType.name() == 'PARTNER'">
+                    <!-- 같은 계좌·같은 제휴사의 활성 기본정보 권한이 모두 일치해야 한다. -->
+                    EXISTS (SELECT 1 FROM access_grant g
+                            WHERE g.account_id = t.id AND g.partner_id = #{principalId}
+                              AND g.permission = 'ACCOUNT_READ' AND g.revoked_at IS NULL)
+                </when>
+                <!-- 서비스의 주체 검사가 있어도 SQL 자체에서 지원하지 않는 유형을 기본 거부한다. -->
+                <otherwise>FALSE</otherwise>
+            </choose>
+        ) allowed ON TRUE
+    </select>
+
+    <!-- 상태 행을 남겨 허용된 빈 페이지와 거부를 같은 SQL의 평가 결과로 구분한다. -->
+    <select id="readTransactionPage" resultType="lab.financialapi.account.TransactionPageRow">
+        WITH target AS MATERIALIZED (
+            SELECT id, customer_id FROM account WHERE id = #{accountId}
+        )
+        SELECT EXISTS (SELECT 1 FROM target) AS account_exists,
+               allowed.id AS authorized_account_id, page.id AS transaction_id,
+               page.occurred_at, page.amount, page.description
+        <!-- 허용된 계좌가 없거나 거래가 없어도 기준 행이 남는다. 상태 플래그로 경우를 구분한다. -->
+        FROM (VALUES (1)) AS seed(value)
+        LEFT JOIN LATERAL (
+            SELECT t.id FROM target t
+            WHERE
+            <choose>
+                <when test="principalType != null and principalType.name() == 'CUSTOMER'">
+                    t.customer_id = #{principalId}
+                </when>
+                <when test="principalType != null and principalType.name() == 'PARTNER'">
+                    <!-- ACCOUNT_READ를 대신 허용하지 않고 거래 전용 권한을 검사한다. -->
+                    EXISTS (SELECT 1 FROM access_grant g
+                            WHERE g.account_id = t.id AND g.partner_id = #{principalId}
+                              AND g.permission = 'TRANSACTION_READ' AND g.revoked_at IS NULL)
+                </when>
+                <otherwise>FALSE</otherwise>
+            </choose>
+        ) allowed ON TRUE
+        <!-- 앞에서 인가된 allowed.id의 거래만 읽는다. 거부된 요청에서는 거래가 조인되지 않는다. -->
+        LEFT JOIN LATERAL (
+            SELECT t.id, t.occurred_at, t.amount, t.description FROM transaction_record t
+            WHERE t.account_id = allowed.id
+            <!-- 같은 거래 시각에도 페이지 순서가 흔들리지 않도록 UUID를 보조 정렬로 사용한다. -->
+            ORDER BY t.occurred_at DESC, t.id DESC
+            LIMIT #{limit} OFFSET #{offset}
+        ) page ON TRUE
+        <!-- 내부 페이지와 최종 반환의 정렬을 일치시킨다. 거래가 없으면 null인 상태 행만 남는다. -->
+        ORDER BY page.occurred_at DESC NULLS LAST, page.id DESC
+    </select>
+
     <select id="findForCustomer" resultType="lab.financialapi.account.Account">
         SELECT id, customer_id, bank_name, masked_account_number, balance, created_at
         FROM account WHERE id = #{accountId} AND customer_id = #{customerId}
