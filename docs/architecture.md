@@ -117,7 +117,7 @@ Authorization Service가 요청 주체·대상 계좌·조회 행위에 대한 �
 - `AccountQueryService`는 조회 후 `audit.ReadAuditService`의 별도 Bean 프록시로 동기 감사하고, 커밋이 끝난 뒤에만 성공 또는 404를 반환한다. 감사 실패면 고정 운영 오류를 기록하고 503으로 차단한다.
 - `common.web.RequestIds`는 조회 성공·오류·감사 및 보안 오류에서 같은 서버 UUID를 사용한다. `ApiExceptionHandler`는 고정된 조회 오류를 반환하고 SQL·예외 상세를 응답/운영 오류 메시지에 넣지 않는다.
 
-5단계에서는 금융정보 반환의 선행 조건인 조회용 최소 감사를 포함했다. 권한 변경과 감사의 동일 트랜잭션은 아래 6단계에서 구현했으며, 인증/입력 오류 감사와 탐지 집계는 후속 단계다.
+5단계에서는 금융정보 반환의 선행 조건인 조회용 최소 감사를 포함했다. 권한 변경과 감사의 동일 트랜잭션은 아래 6단계에서 구현했으며, 인증/입력 오류 감사와 탐지 집계는 아래7단계에서 구현했다.
 
 ### MyBatis 원칙
 
@@ -139,7 +139,7 @@ Authorization Service가 요청 주체·대상 계좌·조회 행위에 대한 �
 
 회수는 계좌·grantId·소유자·revoked_at IS NULL을 제한한 조건부 UPDATE를 사용한다. UPDATE 자체의 행 잠금을 활용하며, 0행이면 소유자 조건의 새 조회로 이미 회수된 권한과 미존재/무권한을 구분한다. 이미 회수된 소유 권한은 revoked_at을 보존하고 반복 회수 감사 후 204를 반환한다. 실제 회수 감사와 반복 요청 감사는 사유를 구분한다.
 
-인증된 PARTNER의 권한 변경 역할 거부도 접근 거부 감사 대상이다. Controller/보안 경계에서 서비스 진입 전에 거부되더라도 독립 감사를 완료한 뒤 403을 반환하며, 필수 감사 실패는 503이다. 인증 실패·입력 오류 전체 감사는 후속 범위로 유지한다.
+인증된 PARTNER의 권한 변경 역할 거부도 접근 거부 감사 대상이다. Controller/보안 경계에서 서비스 진입 전에 거부되더라도 독립 감사를 완료한 뒤 403을 반환하며, 필수 감사 실패는 503이다. 인증 실패·입력 오류는 아래7단계의 별도 정책을 적용한다.
 
 권한 변경 필수 감사 실패는 전체 변경을 롤백하고 503 SERVICE_UNAVAILABLE로 반환한다. 반복 회수의 필수 감사 실패도 503이며 성공 응답은 감사 커밋 이후에만 반환한다.
 
@@ -147,7 +147,7 @@ Authorization Service가 요청 주체·대상 계좌·조회 행위에 대한 �
 
 ### 6.1 6단계 권한 변경 구현
 
-- AccessGrantController는 표준 UUID·요청 DTO를 검증하고 서버 생성 requestId와 검증된 주체를 AccessGrantService에 전달한다. 역할 검사와 감사가 분리되지 않도록 조정 서비스에서 CUSTOMER 여부를 확인한다. 인증된 PARTNER의 유효한 형식 요청은 독립 감사 후 403이며, 인증/입력 오류 전체 감사는 추가하지 않는다.
+- AccessGrantController는 표준 UUID·요청 DTO를 검증하고 서버 생성 requestId와 검증된 주체를 AccessGrantService에 전달한다. 역할 검사와 감사가 분리되지 않도록 조정 서비스에서 CUSTOMER 여부를 확인한다. 인증된 PARTNER의 유효한 형식 요청은 독립 감사 후 403이며, 인증/입력 오류 감사는 아래7단계의 별도 경계에서 수행한다.
 - AccessGrantTransactionService의 별도 Bean 프록시는 REQUIRES_NEW·READ_COMMITTED 쓰기 트랜잭션을 연다. 소유자 UUID·대상 제휴사를 확인하고 소유권 조건을 포함한 변경 SQL을 호출한다. GrantAuditService의 MANDATORY로 변경과 성공 감사를 원자적으로 저장한다. 프록시 커밋까지 완료한 뒤에만 201/204를 반환한다.
 - insertActive는 ON CONFLICT (account_id, partner_id, permission) WHERE revoked_at IS NULL DO NOTHING으로 기존 부분 UNIQUE에 대응하는 충돌만 0행으로 받는다. 조정 서비스는 업무 거부로 롤백을 끝낸 뒤 GrantDeniedAuditService의 REQUIRES_NEW로 거부 감사하고 409를 반환한다. 다른 제약·DB·필수 감사·커밋 실패는 내부 상세 없는 503이다.
 - 회수 UPDATE 0행은 findForOwner로 새 스냅샷에서 재확인한다. 이미 회수된 소유 권한만 204이며 활성 상태인데 변경되지 않았다면 장애로 처리한다. 최초 회수는 GRANT_REVOKED, 반복은 GRANT_ALREADY_REVOKED로 구분하고 revoked_at을 보존한다.
@@ -181,6 +181,13 @@ PostgreSQL 기본 `READ COMMITTED`를 사용하고 매 조회 SQL에서 현재 �
 
 감사 저장소 장애로 기록을 남길 수 없으면 운영 오류를 기록하고 접근은 허용하지 않는다. 저장소 장애 시 감사 기록의 완전한 보존은 보장하지 않는다.
 
+### 6.2 인증·입력 오류 감사
+
+- RequestFailureAuditor는 MVC와 동일한 RequestPath/PathPattern의 세그먼트별 디코딩으로 네 금융API의 경로·메서드만 고정 action으로 분류한다. URI 전체를 임의로 디코딩하지 않는다. 인증 실패는 SecurityErrorHandler.commence에서, 입력 오류는 ApiExceptionHandler의 형식 오류 및 업무400 경계에서 연결한다. 동일 요청은 한 번만 시도한다.
+- RequestFailureAuditService.record는 REQUIRES_NEW로 저장한다. 프록시 커밋 실패까지 호출 경계에서 포착해 원래401/400을 유지하고 고정 운영 오류를 기록한다. 이는 새 인증/입력 오류 감사에만 적용하며 기존 필수 감사503과 구분한다.
+- 인증 실패는 주체를 항상ANONYMOUS/null로 사용한다. 입력 오류는 SecurityContext의 검증된 AuthenticatedPrincipal만 사용한다. 표준 UUID가 아닌 대상은resource_ref=null이다. DB의 객체 존재 여부를 추가 조회하지 않는다.
+- 토큰·클레임·HTTP본문/쿼리/경로·오류원문은 감사 서비스에 넘기지 않는다. 서버 요청ID는 감사·응답 헤더·오류 본문에 동일하게 사용하며 감사 실패를 재귀 감사하지 않는다.
+
 ## 7. 이상 접근 탐지
 
 AuditEvent를 주기적으로 조회하는 규칙 기반 탐지를 사용한다.
@@ -200,7 +207,15 @@ AuditEvent를 주기적으로 조회하는 규칙 기반 탐지를 사용한다.
 
 외부에는 동일한 404를 반환하더라도 내부에서는 확인된 권한 위반과 단순 객체 미존재를 구분해 탐지한다.
 
-동일 주체·규칙에 대한 중복 알림을 억제한다. 정확한 중복 처리 방식은 구현 시 검증한다.
+### 7.1 집계·중복 억제 구현
+
+- DetectionService.detect는 별도 REQUIRES_NEW/READ_COMMITTED 트랜잭션에서 DetectionMapper.currentTime의 DB statement_timestamp를 한 번 읽어T로 고정한다. candidates는 occurred_at > T-5분 AND occurred_at <= T의 커밋된 이벤트를 집계한다. 창 시작은 제외·끝은 포함하고 미래 이벤트는 제외한다.
+- result=DENIED, reason_code=OBJECT_ACCESS_DENIED, CUSTOMER/PARTNER 유형·주체UUID·가명 대상이 있는 ACCOUNT_READ/TRANSACTION_READ/GRANT_CREATE/GRANT_REVOKE만 집계한다. 유형과UUID로 그룹화하고 COUNT>=5·서로 다른resource_ref>=3을 모두 만족해야 후보가 된다.
+- detection_state의 PK(rule_id,principal_type,principal_id)와 조건부UPSERT로 DB 현재시각과 집계창T 모두 이전 last_alert_at에서5분 이상 경과한 새 창만 원자적으로 선점한다. 만료 전 후보가 잠금 대기 후 재알림되는 것을 막는다. last_alert_at은 선점 시 DB clock_timestamp이며 성공 알림의 detected_at과 같다. 실패한 트랜잭션의 상태는 남지 않는다.
+- suppression 상태 변경과 SecurityAlert INSERT는 한 트랜잭션이다. INSERT·커밋 실패 시 모두 롤백해 다음 실행이 다시 시도한다. 경합한 실행도 DB 상태를 기준으로 한 번만 생성한다. 다른 주체·규칙의 억제 상태는 독립적이다.
+- DetectionScheduler.run은 기본적으로 기동30초 후부터30초 fixedRate로 별도 서비스를 호출한다. 실패 시 원문 없는 운영 오류를 남기고 다음 호출을 유지하며 금융API결과를 바꾸지 않는다. 자동 차단은 하지 않는다.
+- detection.scheduling.enabled는 기본true다. 테스트 프로필에서만 자동 실행을false로 두고 실제 서비스를 직접 호출해 DB·API 연결과 경합을 검증한다. 운영에서 비활성화하면 탐지가 실행되지 않는다.
+- 재기동 후에도 DB의 억제 상태를 유지한다. 발생 시각 기준의 최근5분만 보므로 늦은 커밋이 창을 벗어나거나 장기 중단된 과거 이벤트를 소급 탐지하는 것은 보장하지 않는다. 전체 후보의 상태·알림은 배치 단위로 커밋·롤백한다.
 
 감사 기록과 탐지 처리를 분리해 탐지 실패가 접근 제어 결과에 영향을 주지 않도록 한다.
 
@@ -239,8 +254,8 @@ SAST·의존성 검사는 단계적으로 추가하며 결함 주입 Evals는 �
 
 - 외부 토큰 발급 도구 구성(제품 API 외부), 운영 키 교체 방식
 - [SQL·트랜잭션 경계의 실제 동시성 검증](#권한-회수와-조회의-동시성)
-- 인증/입력 오류 감사 및 전체 요청 추적 확장(조회·권한 변경 감사 경계는 구현됨)
-- [탐지 중복 알림 억제](#7-이상-접근-탐지)
+- 향후 새 API 추가 시 오류 감사 대상과 고정 action 매핑 확장
+- 탐지 장기 중단·늦은 커밋 소급 처리 및 운영 부하에 따른 집계 최적화
 - [Codex 하네스 및 CI의 구체적인 실행 절차](#8-테스트-및-ci)
 
 ## 11. 관련 문서

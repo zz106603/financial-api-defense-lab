@@ -6,6 +6,7 @@ import java.util.Map;
 
 import jakarta.servlet.DispatcherType;
 import lab.financialapi.identity.JwtPrincipalConverter;
+import lab.financialapi.common.web.RequestFailureAuditor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -59,9 +60,13 @@ public class SecurityConfiguration {
 
     /** Controller보다 먼저 요청을 검사할 필터들을 연결한다. 아래 설정 호출 순서가 필터 실행 순서는 아니다. */
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder decoder, JwtPrincipalConverter converter)
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtDecoder decoder,
+            JwtPrincipalConverter converter,
+            RequestFailureAuditor audit)
             throws Exception {
-        var errors = new SecurityErrorHandler();
+        var errors = new SecurityErrorHandler(audit);
         return http
                 // 쿠키/세션으로 자동 인증하지 않는 Bearer 전용 API이므로 CSRF 검사를 사용하지 않는다.
                 .csrf(AbstractHttpConfigurer::disable)

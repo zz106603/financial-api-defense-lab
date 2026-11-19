@@ -17,11 +17,16 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 /**
  * 금융 조회·권한 변경 Controller의 오류를 안전한 JSON 응답으로 바꾼다.
  * Controller 진입 전 JWT 인증 오류는 기존 SecurityErrorHandler가 처리한다.
- * 감사 저장은 이 클래스에서 하지 않고, 업무 서비스가 감사 완료 후 던진 오류를 응답으로 변환한다.
+ * 필수 감사는 업무 서비스가 처리한다. 새 입력 오류 감사는 RequestFailureAuditor에 위임한다.
  */
 @RestControllerAdvice(basePackages = {"lab.financialapi.account", "lab.financialapi.authorization"})
 public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+    private final RequestFailureAuditor audit;
+
+    public ApiExceptionHandler(RequestFailureAuditor audit) {
+        this.audit = audit;
+    }
 
     /** 서비스가 정한 고정 업무 오류의 상태·코드를 유지한다. */
     @ExceptionHandler(ApiException.class)
@@ -29,6 +34,9 @@ public class ApiExceptionHandler {
             ApiException error,
             HttpServletRequest request,
             HttpServletResponse response) {
+        if (error.status().value() == 400) {
+            audit.invalidRequest(request, response);
+        }
         return error(error, request, response);
     }
 
@@ -42,6 +50,7 @@ public class ApiExceptionHandler {
             Exception error,
             HttpServletRequest request,
             HttpServletResponse response) {
+        audit.invalidRequest(request, response);
         return error(ApiException.invalidRequest(), request, response);
     }
 

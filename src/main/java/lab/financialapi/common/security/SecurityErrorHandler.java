@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lab.financialapi.common.web.RequestIds;
+import lab.financialapi.common.web.RequestFailureAuditor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
@@ -16,6 +17,12 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 
 /** 외부에는 고정된 메시지만 반환하고 예외나 JWT의 세부 정보를 노출하지 않는다. */
 final class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDeniedHandler {
+    private final RequestFailureAuditor audit;
+
+    SecurityErrorHandler(RequestFailureAuditor audit) {
+        this.audit = audit;
+    }
+
     /** 토큰이 없거나 인증에 실패했을 때 호출된다. 주체 DB 장애는 잘못된 토큰과 구분해 503을 반환한다. */
     @Override
     public void commence(
@@ -26,6 +33,7 @@ final class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDeni
                 && "temporarily_unavailable".equals(oauth.getError().getErrorCode())) {
             write(request, response, 503, "SERVICE_UNAVAILABLE", "요청을 처리할 수 없습니다.");
         } else {
+            audit.authenticationFailure(request, response);
             response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
             write(request, response, 401, "UNAUTHENTICATED", "인증이 필요합니다.");
         }

@@ -17,9 +17,9 @@ class SchemaIntegrationTest extends PostgresIntegrationSupport {
     @Autowired JdbcTemplate jdbc;
 
     @Test
-    void 일곱_업무_테이블이_생성된다() {
+    void 일곱_업무_테이블과_탐지_상태_테이블이_생성된다() {
         for (String table : new String[]{"customer", "partner", "account", "transaction_record",
-                "access_grant", "audit_event", "security_alert"}) {
+                "access_grant", "audit_event", "security_alert", "detection_state"}) {
             assertThat(jdbc.queryForObject("SELECT to_regclass(?)::text", String.class, table)).isEqualTo(table);
         }
     }

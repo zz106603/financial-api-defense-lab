@@ -2,13 +2,13 @@
 
 ## 1. 범위
 
-[개발 순서](project-overview.md#9-개발-진행-순서)의 2~6단계로, 애플리케이션 기동과 PostgreSQL·MyBatis, JWT 인증·주체 매핑, 금융 조회·권한 변경 API·객체별 인가·감사 원자성·경합을 검증하고 같은 검증을 GitHub Actions에서 실행한다.
+[개발 순서](project-overview.md#9-개발-진행-순서)의 2~7단계로, 애플리케이션 기동과 PostgreSQL·MyBatis, JWT 인증·주체 매핑, 금융 조회·권한 변경 API·객체별 인가·감사 원자성·경합을 검증하고 같은 검증을 GitHub Actions에서 실행한다.
 
 | 대상 | 현재 검증 |
 |---|---|
 | PostgreSQL·MyBatis·Flyway | 앱의 SqlSessionFactory로 격리된 PostgreSQL에 연결하고 Flyway 이력 테이블·검증 결과 확인 |
 | 웹 기동 | 임의 포트로 실제 서버를 실행하고 유효한 서명 토큰으로 미매핑 경로의 HTTP 404 확인 |
-| 업무 스키마 | 7개 테이블, 필수 값·FK·소유자 복합 FK·권한 CHECK·활성 권한 중복·회수 이력·감사 주체·탐지 창 제약 |
+| 업무 스키마 | 7개 업무 테이블·탐지 상태 테이블, 필수 값·FK·소유자 복합 FK·권한 CHECK·활성 권한 중복·회수 이력·감사 주체·탐지 창 제약 |
 | XML Mapper | sub별 주체 매핑, UUID·금액·시각·enum 매핑, 고객 소유권·제휴사별 계좌/권한 범위·회수 상태, 거래 정렬/페이지 격리, 감사·탐지 저장 |
 | DB 경합·가시성 | 독립 트랜잭션의 동시 활성 권한 부여 중 1건만 커밋, 회수 커밋 후 동일 MyBatis 세션의 새 조회 거부 |
 | JWT·요청 주체 | 실제 RSA 서명·변조·알고리즘·클레임 검증, PostgreSQL 주체 매핑·추가 ID/scope 무시·재식별, Bearer 전용/Stateless, 401/403/503 비노출 오류 |
@@ -19,9 +19,9 @@
 | 권한 변경 경합 | 실제 연결 대기, 동시 부여/회수, 선행 감사 롤백 후 경쟁 요청 진행, 회수 전후 조회 및 재부여 이력 분리 |
 | 빌드 | Java 21 컴파일, 테스트, 실행 JAR 패키징 |
 
-형식적인 모델 getter 단위 테스트는 추가하지 않는다. 현재 `ApplicationIntegrationTest` 2개, `SchemaIntegrationTest` 10개, `PersistenceIntegrationTest` 10개, `ConcurrencyIntegrationTest` 3개, `JwtAuthenticationIntegrationTest` 44개, `JwtConfigurationTest` 8개, `FinancialReadProjectionIntegrationTest` 3개, `AccountQueryApiIntegrationTest` 34개, `ResourceReferenceGeneratorTest` 4개, `AccessGrantApiIntegrationTest` 32개, `AccessGrantConcurrencyIntegrationTest` 7개로 총 157개 테스트를 구성한다. 매개변수화 테스트는 각 입력 사례를 한 개로 계산한다.
+형식적인 모델 getter 단위 테스트는 추가하지 않는다. 현재 `ApplicationIntegrationTest` 2개, `SchemaIntegrationTest` 10개, `PersistenceIntegrationTest` 10개, `ConcurrencyIntegrationTest` 3개, `JwtAuthenticationIntegrationTest` 44개, `JwtConfigurationTest` 8개, `FinancialReadProjectionIntegrationTest` 3개, `AccountQueryApiIntegrationTest` 34개, `ResourceReferenceGeneratorTest` 4개, `AccessGrantApiIntegrationTest` 32개, `AccessGrantConcurrencyIntegrationTest` 7개와7단계 오류 감사·탐지 테스트를 구성한다. 최종 개수는 아래 검증 기록을 따른다. 매개변수화 테스트는 각 입력 사례를 한 개로 계산한다.
 
-조회 API에서 SEC-01~07·09·10과 조회 범위의 SEC-12를 검증한다. 6단계에서 SEC-08의 권한 변경 API와 감사 원자성·회수 API 경합을 추가 검증한다. SEC-11의 탐지와 인증/입력 오류 전체 감사까지 완성한 것은 아니므로 SEC-01~12 전체 완료로 해석하지 않는다.
+조회 API에서 SEC-01~07·09·10과 조회 범위의 SEC-12를 검증한다. 6단계에서 SEC-08의 권한 변경 API와 감사 원자성·회수 API 경합을 추가 검증한다. 7단계는 SEC-11의 실제API 감사→알림 연결과 네 금융API의 인증/입력 오류 감사를 검증한다. Evals·운영 부하·외부 관제 검증과는 구분한다.
 
 금융 조회 테스트는 실제 서명 JWT → 보안 필터 → DB 주체 식별 → Controller/Service → 인가 SQL → 독립 감사 커밋을 연결한다. ACCOUNT_READ와 TRANSACTION_READ의 독립성, 허용된 빈 계좌·페이지와 거부의 구분, 동일 외부 404와 별개 내부 감사 사유, BigDecimal 정밀도와 내부 필드 비노출을 확인한다. 감사/금융 DB 장애는 테스트 DB 테이블 이름을 일시 변경하고 finally에서 복원한다. 업무 트랜잭션을 실제 롤백한 후 별도 감사 커밋이 남는지도 확인한다. SQL 검증은 Mockito/H2로 대체하지 않는다.
 
@@ -99,11 +99,29 @@ CI 및 보안 테스트 변경은 AGENTS.md의 High 위험도 기준을 따르�
 - 동시 부여는 부분 UNIQUE로 활성 1건을 보장하고 해당 인덱스 충돌만 409다. 동시 회수는 조건부 UPDATE와 후속 조회로 두 요청 모두 204·실제 회수 감사 1건을 검증한다.
 - 별도 명시적 lock 없이 실제 PostgreSQL·별도 연결·동기화 신호로 커밋 전후를 제어한다. 감사 실패 후 경쟁 요청의 진행과 재부여/이전 grantId 회수도 검증한다.
 - 회수 성공 응답 이후 같은 JWT의 새 계좌·거래 조회는 거부한다. 커밋 전에 시작한 조회의 완료 가능성은 유지한다.
-- 구현 후 관련 테스트·전체 기존 보안 회귀/빌드·독립 리뷰를 수행한다. 인증/입력 오류 전체 감사·탐지 SEC-11은 후속 범위다.
+- 구현 후 관련 테스트·전체 기존 보안 회귀/빌드·독립 리뷰를 수행한다. 인증/입력 오류 감사·탐지 SEC-11은 아래7단계에서 추가 검증한다.
 
 ```powershell
 .\gradlew.bat test --tests '*AccessGrantApiIntegrationTest' --tests '*AccessGrantConcurrencyIntegrationTest' --tests '*ConcurrencyIntegrationTest' --no-daemon
 .\gradlew.bat clean build --no-daemon
 ```
 
-감사 INSERT 실패와 지연 제약 트리거의 커밋 단계 실패 모두 변경 롤백·503을 확인한다. 임시 트리거·제약·테이블 이름 변경은 finally로 복구하며 Testcontainers DB에만 적용한다. 권한 변경 SEC-08 및 회수 SEC-07·감사 민감정보 SEC-12 검증을 포함하지만, 탐지 SEC-11과 인증/입력 오류 전체 감사를 완료한 것으로 해석하지 않는다.
+감사 INSERT 실패와 지연 제약 트리거의 커밋 단계 실패 모두 변경 롤백·503을 확인한다. 임시 트리거·제약·테이블 이름 변경은 finally로 복구하며 Testcontainers DB에만 적용한다. 권한 변경 SEC-08 및 회수 SEC-07·감사 민감정보 SEC-12 검증을 포함하지만, 이6단계 테스트만으로 탐지 SEC-11이나 인증/입력 오류 감사 검증을 대신하지 않는다.
+
+## 6. 7단계 오류 감사·탐지 검증
+
+- RequestFailureAuditIntegrationTest: 네 금융API의 익명 인증 실패·검증된 주체 입력 오류, 요청ID일치·민감정보비노출·독립커밋·중복방지·범위밖제외. 새 감사 INSERT/지연 커밋 실패에도401/400 유지, 기존 필수 감사503 유지.
+- DetectionIntegrationTest: (T-5분,T] 경계·미래제외·임계값·제외사유·주체유형분리,5분억제·조건재충족재알림·과거창제외. 실제 두DB연결이 같은 상태행에서 대기한 뒤 한 알림만 커밋하는지 확인한다. 알림INSERT/커밋 실패는 상태도롤백한다.
+- DetectionApiIntegrationTest: 실제 서명JWT의 무단조회5회·계좌3개→감사→SEC-11 알림. 인증/입력 오류는 집계하지 않고 본인조회는 계속허용한다. 스케줄러 장애 후 다음실행복구·API비영향·기본작업등록·자동실행off 직접실행을 검증한다.
+- 테스트프로필은 자동스케줄러만 비활성화한다. 집계·트랜잭션 검증은 실제 서비스를 호출하고 PostgreSQL을 사용한다. 고정 시간Fixture와DB상태를 제어하며 긴실시간대기나 보안검사 우회를 하지 않는다.
+
+```powershell
+.\gradlew.bat test --tests '*RequestFailureAuditIntegrationTest' --tests '*DetectionIntegrationTest' --tests '*DetectionApiIntegrationTest' --no-daemon '-Dorg.gradle.jvmargs=-Xmx512m -Djava.net.preferIPv4Stack=true'
+.\gradlew.bat clean build --no-daemon '-Dorg.gradle.jvmargs=-Xmx512m -Djava.net.preferIPv4Stack=true'
+```
+
+DB시각기반 최근5분만 집계한다. 창을벗어난 늦은커밋·장기중단 후 과거 이벤트 소급처리, 운영부하·연결풀검증과 원격CI는 로컬 테스트 결과와 구분한다.
+
+7단계 로컬 전체 검증: 기존157개+새24개, 총181개 통과(실패·오류·건너뜀0). Windows의 Gradle 소켓 환경 문제는 일회성 JAVA_TOOL_OPTIONS=-Djava.net.preferIPv4Stack=true로 처리했으며 저장소 설정이나 테스트 기대값을 완화하지 않았다. 원격CI는 미실행이다.
+
+최종 독립 리뷰 수정 후 재검증: 전체184개 통과(기존157+오류감사12+탐지11+API/스케줄러4), 실패·오류·건너뜀0. 억제 만료 전 집계창과 인코딩 URI 감사의3개 사례는 RED→GREEN으로 확인했다. 원격CI는 미실행이다.

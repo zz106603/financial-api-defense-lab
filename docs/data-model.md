@@ -19,11 +19,11 @@ AuditEvent → 접근·권한 변경 이력
 SecurityAlert → AuditEvent 분석 결과
 ```
 
-총 7개 엔티티를 사용한다.
+7개 업무 엔티티와1개 내부 탐지 상태 테이블을 사용한다.
 
 ## 3. 주요 테이블
 
-컬럼 표는 논리 모델이며 `—`는 아래 구현 규칙을 적용한다. 실제 SQL 타입·제약은 `src/main/resources/db/migration/V1__create_financial_schema.sql`을 기준으로 한다.
+컬럼 표는 논리 모델이며 `—`는 아래 구현 규칙을 적용한다. 실제 SQL 타입·제약은 `src/main/resources/db/migration/V1__create_financial_schema.sql`과 `V2__create_detection_state.sql`을 기준으로 한다.
 
 ### 3.1 customer
 
@@ -158,7 +158,21 @@ WHERE revoked_at IS NULL;
 
 MVP에서는 R-01 탐지 결과를 저장한다.
 
-동일 주체·규칙에 대한 중복 알림을 억제하고, 구체적인 중복 방지 방식은 구현 시 결정한다.
+동일 주체 유형·UUID·규칙은 성공 알림의 detected_at 기준5분 동안 억제한다. 이후 최신5분 조건을 다시 만족하면 새 알림을 생성한다. window_start는 제외·window_end는 포함하며 정확히5분 차이다.
+
+### 3.8 detection_state
+
+V2가 추가하는 내부 상태 테이블이며 일반 API에 노출하지 않는다.
+
+| 컬럼 | 타입·제약 | 의미 |
+|---|---|---|
+| rule_id | TEXT, 복합PK | 탐지 규칙 |
+| principal_type | TEXT, 복합PK, CUSTOMER/PARTNER CHECK | 주체 유형 |
+| principal_id | UUID, 복합PK | 검증된 주체 UUID |
+| last_alert_at | TIMESTAMPTZ, NOT NULL | 마지막 성공 알림에 사용한 DB 선점시각 |
+| last_window_end | TIMESTAMPTZ, NOT NULL | 마지막 알림 집계창 끝T |
+
+조건부UPSERT가 DB 현재시각과 이번 집계창T 모두 last_alert_at에서5분 이상 경과하고 last_window_end가 증가했는지 확인해 경쟁 실행을 제어한다. 알림INSERT와 같은 트랜잭션에 참여하므로 실패하면 억제 상태도 롤백한다. 다형적 주체ID에 개별 고객/제휴사 FK를 두지 않는 것은 security_alert와 같다.
 
 ## 4. 데이터 무결성 및 인덱스
 
@@ -179,7 +193,7 @@ MVP에서는 R-01 탐지 결과를 저장한다.
 - `account(id, customer_id)`의 복합 유니크 키를 `access_grant(account_id, granted_by)`가 참조한다. 서비스 소유권 검증과 별도로 잘못된 부여자 저장을 DB에서도 차단한다.
 - FK는 기본 `NO ACTION`으로 참조 데이터를 보존한다. 감사·탐지의 다형적 주체 ID는 특정 주체 테이블 FK를 두지 않는다. 감사는 익명 유형과 null 주체 ID의 일치 여부를 CHECK로 검증한다.
 - 거래 정렬은 `occurred_at DESC, id DESC`이며 `(account_id, occurred_at DESC, id DESC)` 인덱스를 사용한다. 계좌 소유자·권한 참조 FK와 감사 주체/발생시각/사유 및 알림 주체/규칙/탐지시각 인덱스를 둔다.
-- 탐지 창은 종료가 시작 이상이어야 하고 횟수는 음수가 될 수 없으며 서로 다른 대상 수는 위반 횟수 이하다. 중복 알림 억제 제약은 탐지 서비스 구현 단계에서 결정한다.
+- 탐지 창은 종료가 시작 이상이어야 하고 횟수는 음수가 될 수 없으며 서로 다른 대상 수는 위반 횟수 이하다. 중복 억제는3.8의 상태PK·조건부UPSERT·알림과의 동일 트랜잭션으로 구현한다.
 
 ### 4.2 MyBatis 영속성 범위
 
@@ -189,7 +203,7 @@ MVP에서는 R-01 탐지 결과를 저장한다.
 - 기존 거래 목록 메서드의 빈 결과는 허용 판정으로 사용하지 않는다. 5단계 API는 별도 `readAccount/readTransactionPage` 투영으로 존재/인가 상태를 같은 SQL에서 평가한다. 거부 시 금융 필드를 반환하지 않고, 허용된 빈 페이지는 계좌 인가 상태를 유지한다. 주체 유형을 검증할 수 없으면 SQL도 FALSE 분기로 거부한다.
 - `local-cache-scope: STATEMENT`를 사용하고 2차 캐시는 선언하지 않는다. 동일 세션의 반복 조회도 DB의 새 스냅샷에서 권한을 확인한다.
 - 권한 삽입·회수는 소유권 조건을 포함하며 변경 행 수를 반환한다. 회수는 계좌·권한 ID·소유자·활성 상태를 모두 제한하고, 회수 시각이 없으면 변경하지 않는다. 이미 회수된 경우 0행이다. 서비스가 소유자 조건으로 다시 조회해 이미 회수된 해당 계좌의 권한임을 확인하면 HTTP 204를 반환하고 기존 revoked_at을 보존한다. 미존재/무권한은 404다.
-- 감사·탐지 Mapper는 삽입만 제공한다. 5단계에서 금융 조회에 필요한 가명 참조·최소 감사 경계를 구현했다. 6단계에서 권한 변경·감사의 원자성과 독립 거부 감사를 구현했다. 인증/입력 오류 감사 및 탐지 집계·중복 억제는 후속 단계다.
+- 감사·알림 이력 Mapper는 삽입만 제공하며, 별도 DetectionMapper가 집계와 억제 상태 조건부UPSERT를 제공한다. 5단계에서 금융 조회에 필요한 가명 참조·최소 감사 경계를 구현했다. 6단계에서 권한 변경·감사의 원자성과 독립 거부 감사를 구현했다. 7단계에서 인증/입력 오류 감사와 탐지 집계·중복 억제를 추가했다.
 - 영속성 모델은 HTTP 응답 모델이 아니다. 내부 소유자 ID와 생성 시각 등을 API에서 직접 직렬화하지 않는다.
 
 ### 4.3 조회 감사와 가명 참조
@@ -212,6 +226,12 @@ MVP에서는 R-01 탐지 결과를 저장한다.
 | GRANT_CREATE | DENIED | ACTIVE_GRANT_CONFLICT |
 
 실제 회수 성공과 이미 회수된 상태의 반복 요청은 감사 사유로 구분한다. 반복 요청도 감사는 새 이벤트로 기록하지만 권한 레코드·회수 시각을 수정하지 않는다. ACTIVE_GRANT_CONFLICT와 PRINCIPAL_TYPE_DENIED는 객체별 권한 위반인 OBJECT_ACCESS_DENIED와 구분해 후속 탐지에서 잘못 집계하지 않는다.
+
+### 4.5 새 오류 감사와 탐지 대상
+
+새 오류 감사의 action은 요청 대상의 ACCOUNT_READ/TRANSACTION_READ/GRANT_CREATE/GRANT_REVOKE, result는DENIED, reason_code는AUTHENTICATION_FAILED 또는INVALID_REQUEST다. 인증 실패는ANONYMOUS/null이며 입력 오류는 검증된 주체 또는 익명이다. 잘못된 대상UUID는resource_ref=null이다. 이 이벤트는R-01에 포함하지 않는다.
+
+R-01은 명시한 네action의 DENIED/OBJECT_ACCESS_DENIED만 유형·UUID별로 집계하고, 가명 대상이 없는 행은 제외한다. V2의 부분 인덱스가 해당 이벤트의 시간 범위 조회를 지원한다.
 
 ## 5. 권한 데이터 처리
 
@@ -249,7 +269,7 @@ MVP에서는 R-01 탐지 결과를 저장한다.
 ## 7. 후속 구현 결정
 
 - 향후 금액 입력 API의 정밀도 검증 규칙(조회 시각은 UTC ISO 8601로 구현)
-- [탐지 이벤트 중복 방지 제약](#37-security_alert)
+- 탐지 이벤트/억제 상태의 운영 보존 기간은 별도 결정한다.
 - 권한 변경·감사 트랜잭션 및 전체 API 경합은 6단계에서 구현·검증하며 결과는 해당 구현 계획과 테스트 문서에 기록한다.
 
 ## 8. 관련 문서
