@@ -45,6 +45,10 @@ public final class ApiException extends RuntimeException {
         return new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "요청 권한이 없습니다.");
     }
 
+    public static ApiException conflict() {
+        return new ApiException(HttpStatus.CONFLICT, "ACTIVE_GRANT_CONFLICT", "동일한 활성 권한이 이미 존재합니다.");
+    }
+
     /** DB 조회나 필수 감사가 실패하면 금융정보 대신 일반적인 503으로 응답한다. */
     public static ApiException unavailable() {
         return new ApiException(

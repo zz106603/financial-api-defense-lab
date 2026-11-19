@@ -12,6 +12,10 @@ import org.apache.ibatis.annotations.Param;
 public interface AccessGrantMapper {
     int insert(AccessGrant grant);
 
+    int insertActive(AccessGrant grant);
+
+    Optional<UUID> findAccountOwner(@Param("accountId") UUID accountId);
+
     Optional<AccessGrant> findForOwner(@Param("grantId") UUID grantId, @Param("accountId") UUID accountId,
             @Param("customerId") UUID customerId);
 
