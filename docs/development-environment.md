@@ -2,7 +2,7 @@
 
 ## 1. 범위
 
-[프로젝트 개발 순서](project-overview.md#9-개발-진행-순서)의 개발환경을 설명한다. 테스트·CI는 [테스트 및 CI 안내](testing-ci.md)를 따른다. 현재 6단계까지 금융정보 GET·권한 변경 POST/DELETE API, 객체별 인가·조회/권한 변경 감사 및 PostgreSQL 동시성 검증을 구현했다. 인증/입력 오류 전체 감사와 탐지는 후속 단계다.
+[프로젝트 개발 순서](project-overview.md#9-개발-진행-순서)의 개발환경을 설명한다. 테스트·CI는 [테스트 및 CI 안내](testing-ci.md)를 따른다. 현재7단계까지 금융정보 GET·권한 변경 POST/DELETE API, 객체별 인가·감사·PostgreSQL 경합 및R-01 탐지를 구현했다. 새 인증/입력 오류 감사 실패는401/400을 유지하며 기존 필수 감사는503이다.
 
 ## 2. 도구 및 의존성
 
@@ -89,3 +89,7 @@ docker compose stop postgres
 ```
 
 컨테이너와 네트워크를 제거하려면 `docker compose down`을 사용한다. 명명된 `postgres-data` 볼륨은 유지되며, 이 안내의 명령은 DB 데이터를 삭제하지 않는다. 초기화된 볼륨이 있을 때 `.env`의 사용자·DB·비밀번호를 바꾸는 것만으로 기존 DB 계정이 변경되지는 않는다.
+
+## 6. 탐지 실행
+
+기본 설정은 기동30초 후부터30초마다R-01 탐지를 실행한다. 별도 외부 탐지 서버나 관제API는 필요하지 않다. Flyway V2가 detection_state와 탐지 시간 조회 인덱스를 추가한다. detection.scheduling.enabled=false이면 자동 실행이 중지되므로 일반 운영에서는 기본true를 유지한다. 테스트 프로필에서는 자동 실행만 중지하고 실제 탐지 서비스를 직접 호출한다.

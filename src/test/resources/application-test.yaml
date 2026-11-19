@@ -1,3 +1,8 @@
 # 합성 테스트 전용 키. 일반 애플리케이션 설정이나 배포 JAR에는 포함하지 않는다.
 audit:
   resource-hmac-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+
+# 자동 실행만 중지한다. 테스트는 실제 탐지 서비스를 직접 호출해 커밋·경합을 검증한다.
+detection:
+  scheduling:
+    enabled: false

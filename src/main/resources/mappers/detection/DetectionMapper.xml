@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="lab.financialapi.detection.DetectionMapper">
+    <select id="currentTime" resultType="java.time.OffsetDateTime">
+        SELECT statement_timestamp()
+    </select>
+
+    <select id="candidates" resultType="lab.financialapi.detection.DetectionCandidate">
+        SELECT principal_type, principal_id,
+               COUNT(*)::integer AS violation_count,
+               COUNT(DISTINCT resource_ref)::integer AS distinct_resource_count
+        FROM audit_event
+        WHERE occurred_at &gt; CAST(#{windowEnd} AS TIMESTAMPTZ) - INTERVAL '5 minutes'
+          AND occurred_at &lt;= #{windowEnd}
+          AND principal_type IN ('CUSTOMER', 'PARTNER') AND principal_id IS NOT NULL
+          AND result = 'DENIED' AND reason_code = 'OBJECT_ACCESS_DENIED'
+          AND action IN ('ACCOUNT_READ', 'TRANSACTION_READ', 'GRANT_CREATE', 'GRANT_REVOKE')
+          AND resource_ref IS NOT NULL
+        GROUP BY principal_type, principal_id
+        HAVING COUNT(*) &gt;= 5 AND COUNT(DISTINCT resource_ref) &gt;= 3
+        ORDER BY principal_type, principal_id
+    </select>
+
+    <!-- RETURNING을 읽는 쓰기 SQL이다. 캐시를 비우고 트랜잭션 변경으로 취급한다. -->
+    <select id="claim" resultType="java.time.OffsetDateTime" affectData="true" flushCache="true">
+        INSERT INTO detection_state AS state
+            (rule_id, principal_type, principal_id, last_alert_at, last_window_end)
+        VALUES (#{ruleId}, #{principalType}, #{principalId}, clock_timestamp(), #{windowEnd})
+        ON CONFLICT (rule_id, principal_type, principal_id) DO UPDATE
+        SET last_alert_at = clock_timestamp(), last_window_end = EXCLUDED.last_window_end
+        WHERE state.last_alert_at &lt;= clock_timestamp() - INTERVAL '5 minutes'
+          AND EXCLUDED.last_window_end &gt;= state.last_alert_at + INTERVAL '5 minutes'
+          AND state.last_window_end &lt; EXCLUDED.last_window_end
+        RETURNING last_alert_at
+    </select>
+</mapper>
