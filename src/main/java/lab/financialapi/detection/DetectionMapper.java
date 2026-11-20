@@ -13,11 +13,14 @@ import org.apache.ibatis.annotations.Param;
 public interface DetectionMapper {
     OffsetDateTime currentTime();
 
-    List<DetectionCandidate> candidates(@Param("windowEnd") OffsetDateTime windowEnd);
+    List<DetectionCandidate> candidatesInWindow(
+            @Param("windowEnd") OffsetDateTime windowEnd,
+            @Param("windowSeconds") int windowSeconds);
 
-    Optional<OffsetDateTime> claim(
+    Optional<OffsetDateTime> claimAfterCooldown(
             @Param("ruleId") String ruleId,
             @Param("principalType") PrincipalType principalType,
             @Param("principalId") UUID principalId,
-            @Param("windowEnd") OffsetDateTime windowEnd);
+            @Param("windowEnd") OffsetDateTime windowEnd,
+            @Param("cooldownSeconds") int cooldownSeconds);
 }

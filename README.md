@@ -17,7 +17,18 @@
 - 기동 시 RSA 공개키·JWT issuer/audience와 감사 가명화용 외부 HMAC 비밀키가 필요하다. 개인키·토큰 발급 API는 포함하지 않는다.
 - 권한 변경과 성공 감사는 원자적으로 처리하고, 접근 거부 감사는 독립 저장한다. 기존 필수 감사 실패는503이며 새 인증/입력 오류 감사 실패는401/400을 유지한다.
 - R-01은30초마다 최근5분의 객체별 권한 위반을 집계하고5회·3계좌 이상이면 알림을 생성한다. 동일 주체·규칙은5분 억제 후 조건 재충족 시 재알림하며 자동 차단하지 않는다.
-- 실습용 토큰 발급·요청 도구와 Evals는 후속 단계다.
+- 개발 프로필의 JWT 발급·API 호출 도구를 제공하며 Evals는 후속 단계다.
 
 설치 요건, 실행·종료 및 검증 명령은 [개발환경 안내](docs/development-environment.md)를 따른다.
 테스트 범위·실행 방법과 CI 동작은 [테스트 및 CI 안내](docs/testing-ci.md)를 따른다.
+
+## 로컬 API 확인
+
+Evals 전에 application-dev.yaml과 기존 Compose PostgreSQL로 실제 JWT·API·DB를 확인한다. 기존 테스트 Fixture를 재사용하며 프런트엔드·관리 API는 추가하지 않는다. [개발 환경 설정과 실행 순서](docs/local-development.md)를 따른다. 기본 보안 정책은5분을 유지하고 dev에서만30초로 단축한다.
+
+```powershell
+java scripts/DevTokens.java init .local-dev
+# 위 안내에 따라 환경변수 설정·bootRun·Fixture 적용 후 다른 터미널에서 실행
+.\scripts\dev-api.ps1 Access
+.\scripts\dev-api.ps1 Detection
+```

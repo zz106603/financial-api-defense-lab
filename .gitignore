@@ -20,6 +20,9 @@ out/
 *.log
 logs/
 
+# 로컬 개발 키·토큰
+/.local-dev/
+
 # Operating system metadata
 .DS_Store
 Thumbs.db

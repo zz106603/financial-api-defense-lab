@@ -214,6 +214,7 @@ AuditEvent를 주기적으로 조회하는 규칙 기반 탐지를 사용한다.
 - detection_state의 PK(rule_id,principal_type,principal_id)와 조건부UPSERT로 DB 현재시각과 집계창T 모두 이전 last_alert_at에서5분 이상 경과한 새 창만 원자적으로 선점한다. 만료 전 후보가 잠금 대기 후 재알림되는 것을 막는다. last_alert_at은 선점 시 DB clock_timestamp이며 성공 알림의 detected_at과 같다. 실패한 트랜잭션의 상태는 남지 않는다.
 - suppression 상태 변경과 SecurityAlert INSERT는 한 트랜잭션이다. INSERT·커밋 실패 시 모두 롤백해 다음 실행이 다시 시도한다. 경합한 실행도 DB 상태를 기준으로 한 번만 생성한다. 다른 주체·규칙의 억제 상태는 독립적이다.
 - DetectionScheduler.run은 기본적으로 기동30초 후부터30초 fixedRate로 별도 서비스를 호출한다. 실패 시 원문 없는 운영 오류를 남기고 다음 호출을 유지하며 금융API결과를 바꾸지 않는다. 자동 차단은 하지 않는다.
+- DetectionTiming의 기본값은 창300초·억제300초·주기30000ms다. detection.window-seconds/cooldown-seconds/poll-millis 설정을 읽고 양수를 검증한다. 서비스의 창 시작·Mapper의 바인딩된 SQL 간격·스케줄러가 같은 설정을 사용한다. application-dev.yaml은30/30/2000으로 덮어쓰며 별도 demo 전용 분기는 없다. 기본 application.yaml은 유지하고 개발 프로필의 단축 결과를 운영5분 정책 검증과 구분한다.
 - detection.scheduling.enabled는 기본true다. 테스트 프로필에서만 자동 실행을false로 두고 실제 서비스를 직접 호출해 DB·API 연결과 경합을 검증한다. 운영에서 비활성화하면 탐지가 실행되지 않는다.
 - 재기동 후에도 DB의 억제 상태를 유지한다. 발생 시각 기준의 최근5분만 보므로 늦은 커밋이 창을 벗어나거나 장기 중단된 과거 이벤트를 소급 탐지하는 것은 보장하지 않는다. 전체 후보의 상태·알림은 배치 단위로 커밋·롤백한다.
 
@@ -252,7 +253,7 @@ SAST·의존성 검사는 단계적으로 추가하며 결함 주입 Evals는 �
 
 ## 10. 후속 구현 결정
 
-- 외부 토큰 발급 도구 구성(제품 API 외부), 운영 키 교체 방식
+- 로컬 합성 주체의 외부 JWT 발급·호출 도구는 [개발 환경 안내](local-development.md)로 제공한다. 운영 발급자 연동·키 교체 방식은 별도 범위다.
 - [SQL·트랜잭션 경계의 실제 동시성 검증](#권한-회수와-조회의-동시성)
 - 향후 새 API 추가 시 오류 감사 대상과 고정 action 매핑 확장
 - 탐지 장기 중단·늦은 커밋 소급 처리 및 운영 부하에 따른 집계 최적화

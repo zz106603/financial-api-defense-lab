@@ -1,0 +1,21 @@
+# 로컬 합성 데이터 전용. SPRING_PROFILES_ACTIVE=dev로 명시적으로 선택한다.
+# Docker Compose와 같은 .env를 읽으며 OS 환경변수가 우선한다.
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:${POSTGRES_PORT:5432}/${POSTGRES_DB:financial_api_defense_lab}
+    username: ${POSTGRES_USER:financial_api_lab}
+    password: ${POSTGRES_PASSWORD}
+
+security:
+  jwt:
+    issuer: ${JWT_ISSUER:https://issuer.local.invalid}
+    audience: ${JWT_AUDIENCE:financial-api-defense-lab}
+    public-key-location: ${JWT_PUBLIC_KEY_LOCATION:file:./.local-dev/public.pem}
+
+# 5회·3계좌 조건은 그대로 두고 개발 환경의 시간만 단축한다.
+detection:
+  window-seconds: ${DETECTION_WINDOW_SECONDS:30}
+  cooldown-seconds: ${DETECTION_COOLDOWN_SECONDS:30}
+  poll-millis: ${DETECTION_POLL_MILLIS:2000}

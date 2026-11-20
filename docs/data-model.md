@@ -158,6 +158,8 @@ WHERE revoked_at IS NULL;
 
 MVP에서는 R-01 탐지 결과를 저장한다.
 
+아래5분 간격은 기본 정책이다. application-dev.yaml은 같은 테이블·트랜잭션·조건부 UPSERT를 사용하며 window_end-window_start와 억제 간격에 개발 설정(기본30초)을 적용한다. 기존 행의 시각을 변경하지 않으므로 설정 변경 전후 알림은 창 길이로 구분한다. 개발 환경의 단축 확인은 운영5분 검증과 구분한다.
+
 동일 주체 유형·UUID·규칙은 성공 알림의 detected_at 기준5분 동안 억제한다. 이후 최신5분 조건을 다시 만족하면 새 알림을 생성한다. window_start는 제외·window_end는 포함하며 정확히5분 차이다.
 
 ### 3.8 detection_state

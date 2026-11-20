@@ -13,7 +13,7 @@ public class DetectionScheduler {
         this.detection = detection;
     }
 
-    @Scheduled(fixedRate = 30000, initialDelay = 30000)
+    @Scheduled(fixedRateString = "#{@detectionTiming.pollMillis}", initialDelayString = "#{@detectionTiming.pollMillis}")
     public void run() {
         try {
             detection.detect();

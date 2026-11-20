@@ -94,6 +94,7 @@ class DetectionApiIntegrationTest extends PostgresIntegrationSupport {
         seedDeniedHttpRequests();
         new ApplicationContextRunner()
                 .withBean(DetectionService.class, () -> detection)
+                .withBean(DetectionTiming.class, () -> new DetectionTiming(new org.springframework.core.env.StandardEnvironment()))
                 .withUserConfiguration(DetectionSchedulingConfiguration.class)
                 .run(application -> {
                     assertThat(application).hasSingleBean(DetectionScheduler.class);
@@ -110,6 +111,7 @@ class DetectionApiIntegrationTest extends PostgresIntegrationSupport {
         seedDeniedHttpRequests();
         new ApplicationContextRunner()
                 .withBean(DetectionService.class, () -> detection)
+                .withBean(DetectionTiming.class, () -> new DetectionTiming(new org.springframework.core.env.StandardEnvironment()))
                 .withUserConfiguration(DetectionSchedulingConfiguration.class)
                 .withPropertyValues("detection.scheduling.enabled=false")
                 .run(application -> {

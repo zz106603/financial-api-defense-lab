@@ -5,12 +5,12 @@
         SELECT statement_timestamp()
     </select>
 
-    <select id="candidates" resultType="lab.financialapi.detection.DetectionCandidate">
+    <select id="candidatesInWindow" resultType="lab.financialapi.detection.DetectionCandidate">
         SELECT principal_type, principal_id,
                COUNT(*)::integer AS violation_count,
                COUNT(DISTINCT resource_ref)::integer AS distinct_resource_count
         FROM audit_event
-        WHERE occurred_at &gt; CAST(#{windowEnd} AS TIMESTAMPTZ) - INTERVAL '5 minutes'
+        WHERE occurred_at &gt; CAST(#{windowEnd} AS TIMESTAMPTZ) - (#{windowSeconds} * INTERVAL '1 second')
           AND occurred_at &lt;= #{windowEnd}
           AND principal_type IN ('CUSTOMER', 'PARTNER') AND principal_id IS NOT NULL
           AND result = 'DENIED' AND reason_code = 'OBJECT_ACCESS_DENIED'
@@ -22,14 +22,14 @@
     </select>
 
     <!-- RETURNING을 읽는 쓰기 SQL이다. 캐시를 비우고 트랜잭션 변경으로 취급한다. -->
-    <select id="claim" resultType="java.time.OffsetDateTime" affectData="true" flushCache="true">
+    <select id="claimAfterCooldown" resultType="java.time.OffsetDateTime" affectData="true" flushCache="true">
         INSERT INTO detection_state AS state
             (rule_id, principal_type, principal_id, last_alert_at, last_window_end)
         VALUES (#{ruleId}, #{principalType}, #{principalId}, clock_timestamp(), #{windowEnd})
         ON CONFLICT (rule_id, principal_type, principal_id) DO UPDATE
         SET last_alert_at = clock_timestamp(), last_window_end = EXCLUDED.last_window_end
-        WHERE state.last_alert_at &lt;= clock_timestamp() - INTERVAL '5 minutes'
-          AND EXCLUDED.last_window_end &gt;= state.last_alert_at + INTERVAL '5 minutes'
+        WHERE state.last_alert_at &lt;= clock_timestamp() - (#{cooldownSeconds} * INTERVAL '1 second')
+          AND EXCLUDED.last_window_end &gt;= state.last_alert_at + (#{cooldownSeconds} * INTERVAL '1 second')
           AND state.last_window_end &lt; EXCLUDED.last_window_end
         RETURNING last_alert_at
     </select>

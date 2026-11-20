@@ -125,3 +125,9 @@ DB시각기반 최근5분만 집계한다. 창을벗어난 늦은커밋·장기�
 7단계 로컬 전체 검증: 기존157개+새24개, 총181개 통과(실패·오류·건너뜀0). Windows의 Gradle 소켓 환경 문제는 일회성 JAVA_TOOL_OPTIONS=-Djava.net.preferIPv4Stack=true로 처리했으며 저장소 설정이나 테스트 기대값을 완화하지 않았다. 원격CI는 미실행이다.
 
 최종 독립 리뷰 수정 후 재검증: 전체184개 통과(기존157+오류감사12+탐지11+API/스케줄러4), 실패·오류·건너뜀0. 억제 만료 전 집계창과 인코딩 URI 감사의3개 사례는 RED→GREEN으로 확인했다. 원격CI는 미실행이다.
+
+## 7. 개발 환경 직접 확인
+
+[개발 환경 안내](local-development.md)는 dev 프로필로 실제 JWT·HTTP·기존 PostgreSQL을 확인하는 절차다. scripts/DevTokens.java와 scripts/dev-api.ps1만 사용하고 별도 프로세스 관리자나 데모 전용 테스트 도구는 두지 않는다. DetectionTimingTest는 기본값·환경별 설정·양수 검증을, DetectionTimingIntegrationTest는 PostgreSQL의 단축 창·억제 경계를 다룬다. 기존 DetectionIntegrationTest의5분·동시성 기대는 유지한다. 개발30초 확인으로 운영5분 정책·자동 보안 회귀·Evals를 대체하지 않는다.
+
+2026-11-20 dev 정리본 검증: `./gradlew.bat clean build --no-daemon '-Dorg.gradle.jvmargs=-Xmx512m -Djava.net.preferIPv4Stack=true'`와 실행 한정 `JAVA_TOOL_OPTIONS=-Djava.net.preferIPv4Stack=true`로 전체189개 테스트 통과(실패·오류·건너뜀0). 기존5분·동시성·감사 실패 회귀와 새 기본/환경별 시간 설정·단축 PostgreSQL 경계 테스트를 포함한다. dev JAR의 실제 JWT Access10개 응답 및 요청별 감사, 변조JWT401·입력400 오류 감사, Detection 각5개 요청의 감사5행/3대상·억제 상태 유지·30.006048초 후 재알림을 확인했다. git diff --check, 개발 비밀 Git 제외 및 JAR 혼입 검사도 통과했다. 독립 리뷰의 Critical/Important 지적은 없었으며 문서 미검증 표시를 갱신했다. 원격CI·Evals·실제5분 대기는 이번 실행에 포함하지 않는다.
