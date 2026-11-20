@@ -2,6 +2,7 @@
 .gradle/
 build/
 out/
+__pycache__/
 
 # Local IDE configuration
 .idea/

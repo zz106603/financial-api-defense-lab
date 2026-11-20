@@ -81,7 +81,7 @@ PostgresIntegrationSupport를 상속하는 테스트는 하나의 JVM 수명 Pos
 
 외부 Actions는 공식 저장소의 커밋 SHA로 고정한다. 토큰은 `contents: read`만 부여하고 checkout 자격정보를 저장하지 않는다. Gradle 캐시는 `main` 실행에서만 쓰고 PR에서는 읽기만 허용한다. 테스트에 저장소 비밀값이나 로컬 DB 자격정보는 필요하지 않다.
 
-현재 CI는 모든 테스트를 하나의 `test` 작업으로 실행하며 경로별 생략·실패 무시·Docker 부재 시 건너뛰기를 적용하지 않는다. 이후 보안 테스트도 기본 빌드에 포함한다. 위험도 분류·독립 리뷰 등 하네스 강제의 상세 구현은 [아키텍처의 후속 구현 결정](architecture.md#10-후속-구현-결정)에 따라 남겨 둔다. 저장소의 브랜치 보호·필수 상태 검사 설정은 이 파일만으로 변경되지 않는다.
+정상 CI는 모든 테스트를 하나의 `test` 작업으로 실행하며 경로별 생략·실패 무시·Docker 부재 시 건너뛰기를 적용하지 않는다. 보안 Evals는 별도 수동 워크플로로 분리한다. 위험도 분류·독립 리뷰의 운영 기준과 검증 증거는 [하네스 안내](security-evals.md)를 따른다. 저장소의 브랜치 보호·필수 상태 검사 설정은 이 파일만으로 변경되지 않는다.
 
 ## 4. 검증의 구분
 
@@ -131,3 +131,9 @@ DB시각기반 최근5분만 집계한다. 창을벗어난 늦은커밋·장기�
 [개발 환경 안내](local-development.md)는 dev 프로필로 실제 JWT·HTTP·기존 PostgreSQL을 확인하는 절차다. scripts/DevTokens.java와 scripts/dev-api.ps1만 사용하고 별도 프로세스 관리자나 데모 전용 테스트 도구는 두지 않는다. DetectionTimingTest는 기본값·환경별 설정·양수 검증을, DetectionTimingIntegrationTest는 PostgreSQL의 단축 창·억제 경계를 다룬다. 기존 DetectionIntegrationTest의5분·동시성 기대는 유지한다. 개발30초 확인으로 운영5분 정책·자동 보안 회귀·Evals를 대체하지 않는다.
 
 2026-11-20 dev 정리본 검증: `./gradlew.bat clean build --no-daemon '-Dorg.gradle.jvmargs=-Xmx512m -Djava.net.preferIPv4Stack=true'`와 실행 한정 `JAVA_TOOL_OPTIONS=-Djava.net.preferIPv4Stack=true`로 전체189개 테스트 통과(실패·오류·건너뜀0). 기존5분·동시성·감사 실패 회귀와 새 기본/환경별 시간 설정·단축 PostgreSQL 경계 테스트를 포함한다. dev JAR의 실제 JWT Access10개 응답 및 요청별 감사, 변조JWT401·입력400 오류 감사, Detection 각5개 요청의 감사5행/3대상·억제 상태 유지·30.006048초 후 재알림을 확인했다. git diff --check, 개발 비밀 Git 제외 및 JAR 혼입 검사도 통과했다. 독립 리뷰의 Critical/Important 지적은 없었으며 문서 미검증 표시를 갱신했다. 원격CI·Evals·실제5분 대기는 이번 실행에 포함하지 않는다.
+
+## 8. 보안 Evals 및 검증 하네스
+
+[실행·판정·결과](security-evals.md)는 정상 CI와 분리된 도구를 사용한다. `python -m unittest discover -s scripts/tests -p test_security_evals.py`로 도구 판정을 검증하고 `python scripts/security_evals.py`로 PostgreSQL 정상 기준선과4개 결함을 실행한다. Security Evals 수동 워크플로가 같은 명령과 결과 업로드를 제공한다.
+
+2026-11-20 최종 로컬 실행: 기준선12개 PASS, 각 변형도 동일12개 실행, EVAL-01~04 모두 예상 assertion으로 DETECTED(고객2건·제휴사1건·회수1건·응답필드1건). 탐지4/4, 정상 기준선 오탐0. 도구12개 및 정상 전체189개 회귀·build --rerun-tasks 통과. 원본 소스 fingerprint 불변, 정상 JAR 결함 미포함 확인. 독립 리뷰의 판정 정확성·집계 및 테스트 보완을 반영했다. 초기 XML 이름 불일치·Windows 소켓 실패는 INVALID로 구분해 기록했다. 원격 Evals CI와 Agent 자동 식별·수정 비교는 미실행이며 위 자동 테스트 결과로 대체 보고하지 않는다.
