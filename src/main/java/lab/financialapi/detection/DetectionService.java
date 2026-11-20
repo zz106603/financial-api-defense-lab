@@ -12,18 +12,21 @@ import org.springframework.transaction.annotation.Transactional;
 public class DetectionService {
     private final DetectionMapper detection;
     private final SecurityAlertMapper alerts;
+    private final DetectionTiming timing;
 
-    public DetectionService(DetectionMapper detection, SecurityAlertMapper alerts) {
+    public DetectionService(DetectionMapper detection, SecurityAlertMapper alerts, DetectionTiming timing) {
         this.detection = detection;
         this.alerts = alerts;
+        this.timing = timing;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
     public int detect() {
         var end = detection.currentTime();
         int created = 0;
-        for (var candidate : detection.candidates(end)) {
-            var claimedAt = detection.claim("R-01", candidate.principalType(), candidate.principalId(), end);
+        for (var candidate : detection.candidatesInWindow(end, timing.windowSeconds())) {
+            var claimedAt = detection.claimAfterCooldown(
+                    "R-01", candidate.principalType(), candidate.principalId(), end, timing.cooldownSeconds());
             if (claimedAt.isEmpty()) {
                 continue;
             }
@@ -33,7 +36,7 @@ public class DetectionService {
                     "R-01",
                     candidate.principalType(),
                     candidate.principalId(),
-                    end.minusMinutes(5),
+                    end.minusSeconds(timing.windowSeconds()),
                     end,
                     candidate.violationCount(),
                     candidate.distinctResourceCount(),

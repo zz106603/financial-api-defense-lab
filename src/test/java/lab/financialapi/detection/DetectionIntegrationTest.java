@@ -37,10 +37,10 @@ class DetectionIntegrationTest extends PostgresIntegrationSupport {
     void 창_시작은_제외하고_끝은_포함하며_미래_이벤트는_집계하지_않는다() {
         violations(4, 3, T.minusMinutes(1));
         event("CUSTOMER", SUBJECT, T.minusMinutes(5), 0, "DENIED", "OBJECT_ACCESS_DENIED", "ACCOUNT_READ");
-        assertThat(mapper.candidates(T)).isEmpty();
+        assertThat(mapper.candidatesInWindow(T, 300)).isEmpty();
         event("CUSTOMER", SUBJECT, T, 1, "DENIED", "OBJECT_ACCESS_DENIED", "TRANSACTION_READ");
         event("CUSTOMER", SUBJECT, T.plusNanos(1000), 2, "DENIED", "OBJECT_ACCESS_DENIED", "ACCOUNT_READ");
-        var result = mapper.candidates(T);
+        var result = mapper.candidatesInWindow(T, 300);
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().violationCount()).isEqualTo(5);
         assertThat(result.getFirst().distinctResourceCount()).isEqualTo(3);
@@ -57,17 +57,17 @@ class DetectionIntegrationTest extends PostgresIntegrationSupport {
         event("ANONYMOUS", null, T, 0, "DENIED", "OBJECT_ACCESS_DENIED", "ACCOUNT_READ");
         event("CUSTOMER", SUBJECT, T, -1, "DENIED", "OBJECT_ACCESS_DENIED", "ACCOUNT_READ");
         event("CUSTOMER", SUBJECT, T, 0, "DENIED", "OBJECT_ACCESS_DENIED", "UNSUPPORTED_ACTION");
-        assertThat(mapper.candidates(T)).isEmpty();
+        assertThat(mapper.candidatesInWindow(T, 300)).isEmpty();
         event("CUSTOMER", SUBJECT, T, 0, "DENIED", "OBJECT_ACCESS_DENIED", "GRANT_REVOKE");
-        assertThat(mapper.candidates(T).getFirst().violationCount()).isEqualTo(5);
+        assertThat(mapper.candidatesInWindow(T, 300).getFirst().violationCount()).isEqualTo(5);
     }
 
     @Test
     void 횟수와_서로다른_계좌_조건을_모두_충족해야_한다() {
         violations(5, 2, T);
-        assertThat(mapper.candidates(T)).isEmpty();
+        assertThat(mapper.candidatesInWindow(T, 300)).isEmpty();
         event("CUSTOMER", SUBJECT, T, 2, "DENIED", "OBJECT_ACCESS_DENIED", "GRANT_CREATE");
-        assertThat(mapper.candidates(T).getFirst().distinctResourceCount()).isEqualTo(3);
+        assertThat(mapper.candidatesInWindow(T, 300).getFirst().distinctResourceCount()).isEqualTo(3);
     }
 
     @Test
@@ -76,10 +76,10 @@ class DetectionIntegrationTest extends PostgresIntegrationSupport {
         for (int i = 0; i < 4; i++) {
             event("PARTNER", SUBJECT, T, i % 3, "DENIED", "OBJECT_ACCESS_DENIED", "ACCOUNT_READ");
         }
-        assertThat(mapper.candidates(T)).isEmpty();
+        assertThat(mapper.candidatesInWindow(T, 300)).isEmpty();
         event("PARTNER", SUBJECT, T, 0, "DENIED", "OBJECT_ACCESS_DENIED", "ACCOUNT_READ");
-        assertThat(mapper.candidates(T)).hasSize(1);
-        assertThat(mapper.candidates(T).getFirst().principalType()).isEqualTo(PrincipalType.PARTNER);
+        assertThat(mapper.candidatesInWindow(T, 300)).hasSize(1);
+        assertThat(mapper.candidatesInWindow(T, 300).getFirst().principalType()).isEqualTo(PrincipalType.PARTNER);
     }
 
     @Test
@@ -112,11 +112,11 @@ class DetectionIntegrationTest extends PostgresIntegrationSupport {
 
     @Test
     void 억제기간이_지나도_동일하거나_과거_집계창은_다시_사용하지_않는다() {
-        assertThat(mapper.claim("R-01", PrincipalType.CUSTOMER, SUBJECT, T)).isPresent();
+        assertThat(mapper.claimAfterCooldown("R-01", PrincipalType.CUSTOMER, SUBJECT, T, 300)).isPresent();
         jdbc.update("UPDATE detection_state SET last_alert_at = ?", T.minusMinutes(6));
-        assertThat(mapper.claim("R-01", PrincipalType.CUSTOMER, SUBJECT, T)).isEmpty();
-        assertThat(mapper.claim("R-01", PrincipalType.CUSTOMER, SUBJECT, T.minusSeconds(30))).isEmpty();
-        assertThat(mapper.claim("R-01", PrincipalType.CUSTOMER, SUBJECT, T.plusSeconds(30))).isPresent();
+        assertThat(mapper.claimAfterCooldown("R-01", PrincipalType.CUSTOMER, SUBJECT, T, 300)).isEmpty();
+        assertThat(mapper.claimAfterCooldown("R-01", PrincipalType.CUSTOMER, SUBJECT, T.minusSeconds(30), 300)).isEmpty();
+        assertThat(mapper.claimAfterCooldown("R-01", PrincipalType.CUSTOMER, SUBJECT, T.plusSeconds(30), 300)).isPresent();
     }
 
     @Test
@@ -124,8 +124,8 @@ class DetectionIntegrationTest extends PostgresIntegrationSupport {
         // 실시간 대기 없이 DB시각과 집계T를 분리해 잠금 대기 직전/직후를 재현한다.
         jdbc.update("INSERT INTO detection_state VALUES ('R-01','CUSTOMER',?,?,?)",
                 SUBJECT, T.minusMinutes(5).plusSeconds(1), T.minusMinutes(5).plusSeconds(1));
-        assertThat(mapper.claim("R-01", PrincipalType.CUSTOMER, SUBJECT, T)).isEmpty();
-        assertThat(mapper.claim("R-01", PrincipalType.CUSTOMER, SUBJECT, T.plusSeconds(1))).isPresent();
+        assertThat(mapper.claimAfterCooldown("R-01", PrincipalType.CUSTOMER, SUBJECT, T, 300)).isEmpty();
+        assertThat(mapper.claimAfterCooldown("R-01", PrincipalType.CUSTOMER, SUBJECT, T.plusSeconds(1), 300)).isPresent();
     }
 
     @Test
