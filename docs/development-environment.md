@@ -93,3 +93,7 @@ docker compose stop postgres
 ## 6. 탐지 실행
 
 기본 설정은 기동30초 후부터30초마다R-01 탐지를 실행한다. 별도 외부 탐지 서버나 관제API는 필요하지 않다. Flyway V2가 detection_state와 탐지 시간 조회 인덱스를 추가한다. detection.scheduling.enabled=false이면 자동 실행이 중지되므로 일반 운영에서는 기본true를 유지한다. 테스트 프로필에서는 자동 실행만 중지하고 실제 탐지 서비스를 직접 호출한다.
+
+## 7. Evals 전 개발 환경 API 확인
+
+[개발 프로필 안내](local-development.md)에 따라 application-dev.yaml과 기존 Compose PostgreSQL을 사용한다. dev에서만 로컬 .env를 읽고 DB 설정·JWT 공개키 위치·탐지 시간을 적용한다. 개인키·HMAC 키·토큰은 Git 제외된 .local-dev에 둔다. 테스트 Fixture는 빈 개발 DB에 수동으로 한 번만 적용하며 일반 Flyway 기동의 데이터 삽입 정책은 바꾸지 않는다. API 호출은 scripts/dev-api.ps1, DB 확인은 기존 psql을 사용한다. 기본5분 정책과 개발30초 설정의 결과를 구분한다.
