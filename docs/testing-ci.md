@@ -85,7 +85,7 @@ PostgresIntegrationSupport를 상속하는 테스트는 하나의 JVM 수명 Pos
 
 ## 4. 검증의 구분
 
-로컬 Gradle 실행과 workflow 정적 검사는 GitHub Actions 실제 실행을 대신하지 않는다. 커밋·push·PR 생성 이전에는 원격 실행 결과를 확인할 수 없으므로 미검증으로 구분한다.
+로컬 Gradle 실행과 workflow 정적 검사는 GitHub Actions 실제 실행을 대신하지 않는다. 검증 대상 커밋이 원격에 반영되기 전에는 해당 커밋의 원격 실행 결과를 확인할 수 없으므로 미검증으로 구분한다. 이미 원격에 있는 main 커밋은 수동 실행으로 확인할 수 있으나, 그 결과가 로컬 미커밋 변경의 원격 검증을 의미하지는 않는다.
 
 CI 및 보안 테스트 변경은 AGENTS.md의 High 위험도 기준을 따르며 관련 테스트, 존재하는 전체 보안 회귀 테스트와 독립 리뷰를 수행한다. 미구현된 보안 회귀 검증을 통과한 것으로 보고하지 않는다.
 
@@ -137,3 +137,9 @@ DB시각기반 최근5분만 집계한다. 창을벗어난 늦은커밋·장기�
 [실행·판정·결과](security-evals.md)는 정상 CI와 분리된 도구를 사용한다. `python -m unittest discover -s scripts/tests -p test_security_evals.py`로 도구 판정을 검증하고 `python scripts/security_evals.py`로 PostgreSQL 정상 기준선과4개 결함을 실행한다. Security Evals 수동 워크플로가 같은 명령과 결과 업로드를 제공한다.
 
 2026-11-20 최종 로컬 실행: 기준선12개 PASS, 각 변형도 동일12개 실행, EVAL-01~04 모두 예상 assertion으로 DETECTED(고객2건·제휴사1건·회수1건·응답필드1건). 탐지4/4, 정상 기준선 오탐0. 도구12개 및 정상 전체189개 회귀·build --rerun-tasks 통과. 원본 소스 fingerprint 불변, 정상 JAR 결함 미포함 확인. 독립 리뷰의 판정 정확성·집계 및 테스트 보완을 반영했다. 초기 XML 이름 불일치·Windows 소켓 실패는 INVALID로 구분해 기록했다. 원격 Evals CI와 Agent 자동 식별·수정 비교는 미실행이며 위 자동 테스트 결과로 대체 보고하지 않는다.
+
+## 9. 2026-11-24 원격 검증
+
+원격 main fb0b05548150703e6e6ad30ae4bb2939b923006b에서 CI와 Security Evals를 새로 수동 실행하고 두 작업의 success 및 다운로드한 아티팩트를 확인했다. [CI45324564725](https://github.com/zz106603/financial-api-defense-lab/actions/runs/45324564725)는 clean build와16개 suite·189개 테스트 통과(실패/오류/skip0), [Evals45324567917](https://github.com/zz106603/financial-api-defense-lab/actions/runs/45324567917)는 도구12개·기준선12개 PASS와4/4 탐지다. 변형의 예상 assertion 실패2/1/1/1건, 원본 소스 불변, 기준선 오탐0 및 미탐지/INVALID/timeout0을 XML·JSON으로 대조했다.
+
+이 결과는 위 과거 실행 기록의 원격 미실행 상태를 보완한다. 이번 문서 변경 자체·Agent 성능·운영 부하를 원격 검증한 결과는 아니다. 실행 ID·아티팩트·MVP 기준별 남은 항목은 [검증 현황](mvp-status.md)에 기록한다.
