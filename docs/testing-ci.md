@@ -143,3 +143,9 @@ DB시각기반 최근5분만 집계한다. 창을벗어난 늦은커밋·장기�
 원격 main fb0b05548150703e6e6ad30ae4bb2939b923006b에서 CI와 Security Evals를 새로 수동 실행하고 두 작업의 success 및 다운로드한 아티팩트를 확인했다. [CI45324564725](https://github.com/zz106603/financial-api-defense-lab/actions/runs/45324564725)는 clean build와16개 suite·189개 테스트 통과(실패/오류/skip0), [Evals45324567917](https://github.com/zz106603/financial-api-defense-lab/actions/runs/45324567917)는 도구12개·기준선12개 PASS와4/4 탐지다. 변형의 예상 assertion 실패2/1/1/1건, 원본 소스 불변, 기준선 오탐0 및 미탐지/INVALID/timeout0을 XML·JSON으로 대조했다.
 
 이 결과는 위 과거 실행 기록의 원격 미실행 상태를 보완한다. 이번 문서 변경 자체·Agent 성능·운영 부하를 원격 검증한 결과는 아니다. 실행 ID·아티팩트·MVP 기준별 남은 항목은 [검증 현황](mvp-status.md)에 기록한다.
+
+## 10. Grafana 읽기 전용 모니터링 검증
+
+GrafanaMonitoringIntegrationTest는 Testcontainers PostgreSQL에서 실제 psql 계정 스크립트와 dashboard JSON의 SQL을 실행한다. READ ONLY를 꺼도 금융정보 SELECT·쓰기·영구 DDL·역할 승격이 거부되고 PUBLIC 과잉권한에서 설정이 중단되는지 확인한다. 후보 필터·5분 시작 제외/끝 포함·미래 제외·정책창·억제 만료와 변수 인용을 검증한다. 새 파일은 monitoring 디렉터리에 있어 정상 제품 JAR에 포함하지 않는다.
+
+2026-11-24 로컬 build --rerun-tasks 및 총194개 통과(기존189+모니터링5, 실패/오류/skip0). 실제 Grafana provisioning·전용 datasource health·7개 SQL 패널·익명401과 실제 JWT 허용/거부 감사·30.003117초 후 R-01 재알림을 확인했다. 독립 리뷰에 수정 필요 지적은 없었다. 세부 증거·운영 한계는 [모니터링 안내](grafana-monitoring.md)를 따른다. 이번 브랜치의 원격CI·별도 브라우저 시각 검증은 미실행이다.
