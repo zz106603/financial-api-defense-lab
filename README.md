@@ -3,7 +3,7 @@
 
 ## 개발 시작
 
-현재는 [개발 진행 순서](docs/project-overview.md#9-개발-진행-순서)의 7단계인 금융정보 조회·권한 부여/회수 API, 감사 이벤트 및 R-01 이상 접근 탐지까지 구현한 상태다.
+현재는 금융정보 조회·권한 부여/회수, 감사·R-01 탐지와 결함 주입 Evals4개를 구현하고 원격 CI·Evals 실행까지 확인한 상태다. [MVP 검증 현황과 남은 범위](docs/mvp-status.md)에 따라 Agent 작업 효율 측정 등 미완료 항목을 별도로 관리한다.
 
 - Java 21과 Gradle Wrapper로 빌드한다.
 - Spring Boot, MyBatis, PostgreSQL, Flyway 의존성을 구성한다.
