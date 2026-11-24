@@ -1,0 +1,365 @@
+{
+  "uid": "financial-security",
+  "title": "Financial API Security",
+  "tags": [
+    "security",
+    "local",
+    "read-only"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "timezone": "utc",
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "window_seconds",
+        "label": "R-01 window seconds (app setting)",
+        "type": "custom",
+        "query": "Dev 30s : 30, Default 5m : 300",
+        "current": {
+          "text": "Dev 30s",
+          "value": "30"
+        },
+        "options": [
+          {
+            "text": "Dev 30s",
+            "value": "30",
+            "selected": true
+          },
+          {
+            "text": "Default 5m",
+            "value": "300",
+            "selected": false
+          }
+        ],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "cooldown_seconds",
+        "label": "R-01 cooldown seconds (app setting)",
+        "type": "custom",
+        "query": "Dev 30s : 30, Default 5m : 300",
+        "current": {
+          "text": "Dev 30s",
+          "value": "30"
+        },
+        "options": [
+          {
+            "text": "Dev 30s",
+            "value": "30",
+            "selected": true
+          },
+          {
+            "text": "Default 5m",
+            "value": "300",
+            "selected": false
+          }
+        ],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 8,
+      "title": "Read-only local security monitoring / policy settings",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Match both selectors to the running app:** dev = 30 / 30 seconds, default = 300 / 300. Selectors do not change application settings. Fixed last 5 minutes is a separate statistic. R-01 = 5 denials across 3 distinct pseudonymized accounts.\n\nSuppression is inferred from persisted state, not a count of skipped runs. An eligible candidate does not guarantee scheduler execution. No automatic blocking or Grafana alert engine. Charts/tables are limited to the selected range / last 24h; live panels always use DB now."
+      }
+    },
+    {
+      "id": 1,
+      "title": "Access allowed / denied (selected range, max 24h)",
+      "type": "stat",
+      "datasource": {
+        "type": "postgres",
+        "uid": "financial-security-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 8,
+        "h": 4
+      },
+      "description": "",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "financial-security-postgres"
+          },
+          "rawSql": "SELECT count(*) FILTER (WHERE result='ALLOWED') AS allowed, count(*) FILTER (WHERE result='DENIED') AS denied FROM audit_event WHERE occurred_at >= GREATEST(to_timestamp(${__from}/1000.0), statement_timestamp()-interval '24 hours') AND occurred_at <= LEAST(to_timestamp(${__to}/1000.0), statement_timestamp());",
+          "format": "table",
+          "editorMode": "code",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Access trend / minute (selected range, max 24h)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "postgres",
+        "uid": "financial-security-postgres"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 4,
+        "w": 16,
+        "h": 6
+      },
+      "description": "",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "financial-security-postgres"
+          },
+          "rawSql": "SELECT date_trunc('minute',occurred_at) AS time, result, count(*) AS requests FROM audit_event WHERE occurred_at >= GREATEST(to_timestamp(${__from}/1000.0), statement_timestamp()-interval '24 hours') AND occurred_at <= LEAST(to_timestamp(${__to}/1000.0), statement_timestamp()) GROUP BY 1,2 ORDER BY 1,2;",
+          "format": "time_series",
+          "editorMode": "code",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Denial reasons (selected range, max 24h)",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "financial-security-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 8,
+        "h": 6
+      },
+      "description": "",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "financial-security-postgres"
+          },
+          "rawSql": "SELECT reason_code,action,count(*) AS requests FROM audit_event WHERE occurred_at >= GREATEST(to_timestamp(${__from}/1000.0), statement_timestamp()-interval '24 hours') AND occurred_at <= LEAST(to_timestamp(${__to}/1000.0), statement_timestamp()) AND result='DENIED' GROUP BY reason_code,action ORDER BY requests DESC LIMIT 30;",
+          "format": "table",
+          "editorMode": "code",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Unauthorized access / fixed last 5 minutes (DB now)",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "financial-security-postgres"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 10,
+        "w": 16,
+        "h": 6
+      },
+      "description": "Fixed (T-5min,T], independent of dashboard time picker and selected R-01 policy.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "financial-security-postgres"
+          },
+          "rawSql": "WITH p AS (SELECT statement_timestamp() AS t) SELECT principal_type,principal_id,count(*)::integer AS violation_count,count(DISTINCT resource_ref)::integer AS distinct_resource_count FROM audit_event CROSS JOIN p WHERE occurred_at>p.t-interval '5 minutes' AND occurred_at<=p.t AND principal_type IN ('CUSTOMER','PARTNER') AND principal_id IS NOT NULL\nAND result='DENIED' AND reason_code='OBJECT_ACCESS_DENIED'\nAND action IN ('ACCOUNT_READ','TRANSACTION_READ','GRANT_CREATE','GRANT_REVOKE') AND resource_ref IS NOT NULL GROUP BY principal_type,principal_id ORDER BY violation_count DESC,principal_type,principal_id LIMIT 100;",
+          "format": "table",
+          "editorMode": "code",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 5,
+      "title": "R-01 policy candidates / inferred suppression (DB now)",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "financial-security-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 9
+      },
+      "description": "Match selectors to application settings. Read-only estimate; not a count of suppressed executions and not a scheduler-health check.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "financial-security-postgres"
+          },
+          "rawSql": "WITH p AS (SELECT statement_timestamp() AS t,\n  ${window_seconds:sqlstring}::integer AS window_seconds,\n  ${cooldown_seconds:sqlstring}::integer AS cooldown_seconds),\nc AS (SELECT principal_type,principal_id,count(*)::integer AS violation_count,\n count(DISTINCT resource_ref)::integer AS distinct_resource_count\n FROM audit_event CROSS JOIN p WHERE occurred_at>p.t-p.window_seconds*interval '1 second'\n AND occurred_at<=p.t AND principal_type IN ('CUSTOMER','PARTNER') AND principal_id IS NOT NULL\nAND result='DENIED' AND reason_code='OBJECT_ACCESS_DENIED'\nAND action IN ('ACCOUNT_READ','TRANSACTION_READ','GRANT_CREATE','GRANT_REVOKE') AND resource_ref IS NOT NULL GROUP BY principal_type,principal_id),\nk AS (SELECT principal_type,principal_id FROM c UNION\n SELECT principal_type,principal_id FROM detection_state WHERE rule_id='R-01')\nSELECT k.principal_type,k.principal_id,p.t AS evaluated_at,p.window_seconds,p.cooldown_seconds,\n COALESCE(c.violation_count,0) AS violation_count,COALESCE(c.distinct_resource_count,0) AS distinct_resource_count,\n COALESCE(c.violation_count>=5 AND c.distinct_resource_count>=3,false) AS threshold_met,\n s.last_alert_at,s.last_window_end,s.last_alert_at+p.cooldown_seconds*interval '1 second' AS suppression_until,\n CASE WHEN s.last_alert_at IS NULL THEN 0 ELSE ceil(GREATEST(0,extract(epoch FROM\n s.last_alert_at+p.cooldown_seconds*interval '1 second'-p.t)))::integer END AS remaining_seconds,\n CASE WHEN s.last_alert_at IS NULL THEN 'NO_PREVIOUS_ALERT'\n WHEN p.t<s.last_alert_at+p.cooldown_seconds*interval '1 second' THEN 'SUPPRESSED'\n WHEN p.t<=s.last_window_end THEN 'STALE_WINDOW'\n WHEN COALESCE(c.violation_count>=5 AND c.distinct_resource_count>=3,false) THEN 'ELIGIBLE_NOT_A_GUARANTEE'\n ELSE 'CONDITIONS_NOT_MET' END AS suppression_status\nFROM k CROSS JOIN p LEFT JOIN c USING(principal_type,principal_id)\nLEFT JOIN detection_state s ON s.rule_id='R-01' AND s.principal_type=k.principal_type AND s.principal_id=k.principal_id\nORDER BY k.principal_type,k.principal_id LIMIT 100;",
+          "format": "table",
+          "editorMode": "code",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 6,
+      "title": "R-01 persisted alerts / observed window and gap",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "financial-security-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 8
+      },
+      "description": "Gap uses alerts inside the selected/max24h range; first row per principal has no prior gap. Window match does not prove cooldown configuration.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "financial-security-postgres"
+          },
+          "rawSql": "WITH a AS (SELECT *,detected_at-lag(detected_at) OVER\n (PARTITION BY rule_id,principal_type,principal_id ORDER BY detected_at,id) AS alert_gap\n FROM security_alert WHERE rule_id='R-01' AND detected_at>=GREATEST(to_timestamp(${__from}/1000.0),statement_timestamp()-interval '24 hours')\n AND detected_at<=LEAST(to_timestamp(${__to}/1000.0),statement_timestamp()))\nSELECT principal_type,principal_id,rule_id,violation_count,distinct_resource_count,window_start,window_end,\n extract(epoch FROM window_end-window_start)::integer AS observed_window_seconds,\n window_end-window_start=(${window_seconds:sqlstring}::integer*interval '1 second') AS matches_selected_window,\n detected_at,extract(epoch FROM alert_gap) AS alert_gap_seconds\nFROM a ORDER BY detected_at DESC,id DESC LIMIT 100;",
+          "format": "table",
+          "editorMode": "code",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 7,
+      "title": "Recent audit / request IDs (selected range, max 24h)",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "financial-security-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 9
+      },
+      "description": "",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "financial-security-postgres"
+          },
+          "rawSql": "SELECT occurred_at,principal_type,principal_id,action,result,reason_code,resource_ref,request_id FROM audit_event WHERE occurred_at >= GREATEST(to_timestamp(${__from}/1000.0), statement_timestamp()-interval '24 hours') AND occurred_at <= LEAST(to_timestamp(${__to}/1000.0), statement_timestamp()) ORDER BY occurred_at DESC,id DESC LIMIT 200;",
+          "format": "table",
+          "editorMode": "code",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

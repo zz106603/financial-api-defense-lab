@@ -97,3 +97,7 @@ docker compose stop postgres
 ## 7. Evals 전 개발 환경 API 확인
 
 [개발 프로필 안내](local-development.md)에 따라 application-dev.yaml과 기존 Compose PostgreSQL을 사용한다. dev에서만 로컬 .env를 읽고 DB 설정·JWT 공개키 위치·탐지 시간을 적용한다. 개인키·HMAC 키·토큰은 Git 제외된 .local-dev에 둔다. 테스트 Fixture는 빈 개발 DB에 수동으로 한 번만 적용하며 일반 Flyway 기동의 데이터 삽입 정책은 바꾸지 않는다. API 호출은 scripts/dev-api.ps1, DB 확인은 기존 psql을 사용한다. 기본5분 정책과 개발30초 설정의 결과를 구분한다.
+
+## 8. 선택형 Grafana 모니터링
+
+[로컬 보안 모니터링](grafana-monitoring.md)은 기존 PostgreSQL에 읽기 전용 계정을 명시적으로 적용한 뒤 monitoring 프로필의 Grafana1개만 실행한다. 비밀번호는 별도 환경변수로 전달하고 기존 postgres만 실행할 때는 필요하지 않다. 기존 데이터·마이그레이션·앱 실행 방식은 유지한다. 대시보드 정책 변수는 앱 설정과 맞추며 고정 최근5분 통계와 dev30초 탐지를 구분한다.

@@ -1,0 +1,20 @@
+apiVersion: 1
+datasources:
+  - name: Financial security (read only)
+    uid: financial-security-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: grafana_reader
+    isDefault: true
+    editable: false
+    jsonData:
+      database: $POSTGRES_DB
+      sslmode: disable
+      postgresVersion: 1800
+      timescaledb: false
+      maxOpenConns: 2
+      maxIdleConns: 1
+      connMaxLifetime: 60
+    secureJsonData:
+      password: $GRAFANA_DB_PASSWORD

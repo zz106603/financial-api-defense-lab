@@ -41,3 +41,7 @@ java scripts/DevTokens.java init .local-dev
 python -m unittest discover -s scripts/tests -p test_security_evals.py
 python scripts/security_evals.py
 ```
+
+## 로컬 보안 모니터링
+
+[Grafana 실행 안내](docs/grafana-monitoring.md)에 따라 선택형 monitoring 프로필을 시작한다. 기존 감사·R-01 알림·억제 상태3개 테이블만 전용 읽기 계정으로 조회하며 localhost3000에서 허용/거부·최근5분 무단 접근·정책창·억제/재알림을 확인한다. 별도 관제 API나 수집 서버는 사용하지 않는다.

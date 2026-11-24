@@ -222,6 +222,8 @@ AuditEvent를 주기적으로 조회하는 규칙 기반 탐지를 사용한다.
 
 ## 8. 테스트 및 CI
 
+로컬 모니터링은 [Grafana 안내](grafana-monitoring.md)의 선택형 Compose monitoring 프로필로 제공한다. Grafana는 기존 PostgreSQL의 감사·알림·억제 상태3개 테이블에만 SELECT 가능한 전용 계정을 사용하고, 앱의 JWT·인가·감사·탐지 실행 경로에는 참여하지 않는다. 기본 정책/개발 시간 선택과 억제 추정의 한계를 화면에 표시하며 별도 알림 엔진이나 자동 차단을 추가하지 않는다. 역할 설정 SQL·provisioning·dashboard는 monitoring 디렉터리에 두고 제품 JAR·Flyway 마이그레이션과 분리한다.
+
 | 검증 | 도구·방식 |
 |---|---|
 | 정책 단위 테스트 | JUnit |
